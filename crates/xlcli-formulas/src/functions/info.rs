@@ -21,6 +21,12 @@ pub fn register(reg: &mut FunctionRegistry) {
     reg.register(FnSpec { name: "NA", description: "Returns the #N/A error value", syntax: "NA()", min_args: 0, max_args: Some(0), eval: fn_na });
     reg.register(FnSpec { name: "ERROR.TYPE", description: "Returns number for error type", syntax: "ERROR.TYPE(error_val)", min_args: 1, max_args: Some(1), eval: fn_error_type });
     reg.register(FnSpec { name: "SHEET", description: "Returns the sheet number", syntax: "SHEET([value])", min_args: 0, max_args: Some(1), eval: fn_sheet });
+    reg.register(FnSpec { name: "ISREF", description: "TRUE if value is a reference", syntax: "ISREF(value)", min_args: 1, max_args: Some(1), eval: fn_isref });
+    reg.register(FnSpec { name: "ISFORMULA", description: "TRUE if cell contains a formula", syntax: "ISFORMULA(reference)", min_args: 1, max_args: Some(1), eval: fn_isformula });
+    reg.register(FnSpec { name: "SHEETS", description: "Returns number of sheets", syntax: "SHEETS([reference])", min_args: 0, max_args: Some(1), eval: fn_sheets });
+    reg.register(FnSpec { name: "CELL", description: "Returns info about a cell", syntax: "CELL(info_type, [reference])", min_args: 1, max_args: Some(2), eval: fn_cell });
+    reg.register(FnSpec { name: "INFO", description: "Returns system environment info", syntax: "INFO(type_text)", min_args: 1, max_args: Some(1), eval: fn_info });
+    reg.register(FnSpec { name: "NULL", description: "Returns empty/null value", syntax: "NULL()", min_args: 0, max_args: Some(0), eval: fn_null });
 }
 
 fn fn_isblank(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
@@ -120,4 +126,38 @@ fn fn_error_type(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -
 
 fn fn_sheet(_args: &[Expr], ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
     CellValue::Number((ctx.current_sheet() + 1) as f64)
+}
+
+fn fn_isref(args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    CellValue::Boolean(matches!(&args[0], Expr::CellRef { .. } | Expr::Range { .. }))
+}
+
+fn fn_isformula(_args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    CellValue::Boolean(false) // Would need formula storage access
+}
+
+fn fn_sheets(_args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    CellValue::Number(1.0) // Stub — would need workbook access
+}
+
+fn fn_cell(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let info_type = evaluate(&args[0], ctx, reg).display_value().to_lowercase();
+    match info_type.as_str() {
+        "row" => CellValue::Number((ctx.current_cell().row + 1) as f64),
+        "col" => CellValue::Number((ctx.current_cell().col + 1) as f64),
+        _ => CellValue::Error(CellError::Value),
+    }
+}
+
+fn fn_null(_args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    CellValue::Empty
+}
+
+fn fn_info(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let info_type = evaluate(&args[0], ctx, reg).display_value().to_lowercase();
+    match info_type.as_str() {
+        "osversion" => CellValue::String("xlcli".into()),
+        "system" => CellValue::String("xlcli".into()),
+        _ => CellValue::Error(CellError::Value),
+    }
 }

@@ -33,6 +33,33 @@ pub fn register(reg: &mut FunctionRegistry) {
     reg.register(FnSpec { name: "ERF", description: "Returns the error function", syntax: "ERF(lower_limit, [upper_limit])", min_args: 1, max_args: Some(2), eval: fn_erf });
     reg.register(FnSpec { name: "ERFC", description: "Returns complementary error function", syntax: "ERFC(x)", min_args: 1, max_args: Some(1), eval: fn_erfc });
     reg.register(FnSpec { name: "CONVERT", description: "Converts between measurement units", syntax: "CONVERT(number, from_unit, to_unit)", min_args: 3, max_args: Some(3), eval: fn_convert });
+    reg.register(FnSpec { name: "IMSUB", description: "Returns difference of complex numbers", syntax: "IMSUB(inumber1, inumber2)", min_args: 2, max_args: Some(2), eval: fn_imsub });
+    reg.register(FnSpec { name: "IMPRODUCT", description: "Returns product of complex numbers", syntax: "IMPRODUCT(inumber1, [inumber2], ...)", min_args: 1, max_args: None, eval: fn_improduct });
+    reg.register(FnSpec { name: "IMDIV", description: "Returns quotient of complex numbers", syntax: "IMDIV(inumber1, inumber2)", min_args: 2, max_args: Some(2), eval: fn_imdiv });
+    reg.register(FnSpec { name: "IMPOWER", description: "Returns complex number raised to power", syntax: "IMPOWER(inumber, number)", min_args: 2, max_args: Some(2), eval: fn_impower });
+    reg.register(FnSpec { name: "IMSQRT", description: "Returns square root of complex number", syntax: "IMSQRT(inumber)", min_args: 1, max_args: Some(1), eval: fn_imsqrt });
+    reg.register(FnSpec { name: "IMCONJUGATE", description: "Returns conjugate of complex number", syntax: "IMCONJUGATE(inumber)", min_args: 1, max_args: Some(1), eval: fn_imconjugate });
+    reg.register(FnSpec { name: "IMARGUMENT", description: "Returns argument of complex number", syntax: "IMARGUMENT(inumber)", min_args: 1, max_args: Some(1), eval: fn_imargument });
+    reg.register(FnSpec { name: "IMLN", description: "Returns natural log of complex number", syntax: "IMLN(inumber)", min_args: 1, max_args: Some(1), eval: fn_imln });
+    reg.register(FnSpec { name: "IMLOG2", description: "Returns base-2 log of complex number", syntax: "IMLOG2(inumber)", min_args: 1, max_args: Some(1), eval: fn_imlog2 });
+    reg.register(FnSpec { name: "IMLOG10", description: "Returns base-10 log of complex number", syntax: "IMLOG10(inumber)", min_args: 1, max_args: Some(1), eval: fn_imlog10 });
+    reg.register(FnSpec { name: "IMEXP", description: "Returns exponential of complex number", syntax: "IMEXP(inumber)", min_args: 1, max_args: Some(1), eval: fn_imexp });
+    reg.register(FnSpec { name: "IMSIN", description: "Returns sine of complex number", syntax: "IMSIN(inumber)", min_args: 1, max_args: Some(1), eval: fn_imsin });
+    reg.register(FnSpec { name: "IMCOS", description: "Returns cosine of complex number", syntax: "IMCOS(inumber)", min_args: 1, max_args: Some(1), eval: fn_imcos });
+    reg.register(FnSpec { name: "ERF.PRECISE", description: "Returns error function", syntax: "ERF.PRECISE(x)", min_args: 1, max_args: Some(1), eval: fn_erf_precise });
+    reg.register(FnSpec { name: "ERFC.PRECISE", description: "Returns complementary error function", syntax: "ERFC.PRECISE(x)", min_args: 1, max_args: Some(1), eval: fn_erfc_precise });
+    reg.register(FnSpec { name: "IMTAN", description: "Returns tangent of complex number", syntax: "IMTAN(inumber)", min_args: 1, max_args: Some(1), eval: fn_imtan });
+    reg.register(FnSpec { name: "IMSEC", description: "Returns secant of complex number", syntax: "IMSEC(inumber)", min_args: 1, max_args: Some(1), eval: fn_imsec });
+    reg.register(FnSpec { name: "IMCSC", description: "Returns cosecant of complex number", syntax: "IMCSC(inumber)", min_args: 1, max_args: Some(1), eval: fn_imcsc });
+    reg.register(FnSpec { name: "IMCOT", description: "Returns cotangent of complex number", syntax: "IMCOT(inumber)", min_args: 1, max_args: Some(1), eval: fn_imcot });
+    reg.register(FnSpec { name: "IMSINH", description: "Returns hyperbolic sine of complex number", syntax: "IMSINH(inumber)", min_args: 1, max_args: Some(1), eval: fn_imsinh });
+    reg.register(FnSpec { name: "IMCOSH", description: "Returns hyperbolic cosine of complex number", syntax: "IMCOSH(inumber)", min_args: 1, max_args: Some(1), eval: fn_imcosh });
+    reg.register(FnSpec { name: "BESSELI", description: "Returns modified Bessel function In(x)", syntax: "BESSELI(x, n)", min_args: 2, max_args: Some(2), eval: fn_besseli });
+    reg.register(FnSpec { name: "BESSELJ", description: "Returns Bessel function Jn(x)", syntax: "BESSELJ(x, n)", min_args: 2, max_args: Some(2), eval: fn_besselj });
+    reg.register(FnSpec { name: "BESSELK", description: "Returns modified Bessel function Kn(x)", syntax: "BESSELK(x, n)", min_args: 2, max_args: Some(2), eval: fn_besselk });
+    reg.register(FnSpec { name: "BESSELY", description: "Returns Bessel function Yn(x)", syntax: "BESSELY(x, n)", min_args: 2, max_args: Some(2), eval: fn_bessely });
+    reg.register(FnSpec { name: "IMCSCH", description: "Returns complex hyperbolic cosecant", syntax: "IMCSCH(inumber)", min_args: 1, max_args: Some(1), eval: fn_imcsch });
+    reg.register(FnSpec { name: "IMSECH", description: "Returns complex hyperbolic secant", syntax: "IMSECH(inumber)", min_args: 1, max_args: Some(1), eval: fn_imsech });
 }
 
 fn eval_f64(expr: &Expr, ctx: &dyn EvalContext, reg: &FunctionRegistry) -> Option<f64> {
@@ -334,6 +361,303 @@ fn fn_convert(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> C
     }
 }
 
+fn format_complex(real: f64, imag: f64) -> String {
+    if imag == 0.0 { format!("{}", real) }
+    else if real == 0.0 { format!("{}i", imag) }
+    else if imag > 0.0 { format!("{}+{}i", real, imag) }
+    else { format!("{}{}i", real, imag) }
+}
+
+fn fn_imsub(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s1 = eval_str(&args[0], ctx, reg);
+    let s2 = eval_str(&args[1], ctx, reg);
+    match (parse_complex(&s1), parse_complex(&s2)) {
+        (Some((r1, i1)), Some((r2, i2))) => CellValue::String(format_complex(r1 - r2, i1 - i2).into()),
+        _ => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_improduct(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let mut real = 1.0;
+    let mut imag = 0.0;
+    for arg in args {
+        let s = evaluate(arg, ctx, reg).display_value();
+        match parse_complex(&s) {
+            Some((r, i)) => {
+                let nr = real * r - imag * i;
+                let ni = real * i + imag * r;
+                real = nr;
+                imag = ni;
+            }
+            None => return CellValue::Error(CellError::Num),
+        }
+    }
+    CellValue::String(format_complex(real, imag).into())
+}
+
+fn fn_imdiv(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s1 = eval_str(&args[0], ctx, reg);
+    let s2 = eval_str(&args[1], ctx, reg);
+    match (parse_complex(&s1), parse_complex(&s2)) {
+        (Some((r1, i1)), Some((r2, i2))) => {
+            let denom = r2 * r2 + i2 * i2;
+            if denom == 0.0 { return CellValue::Error(CellError::Num); }
+            CellValue::String(format_complex((r1*r2 + i1*i2)/denom, (i1*r2 - r1*i2)/denom).into())
+        }
+        _ => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_impower(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    let n = match eval_f64(&args[1], ctx, reg) { Some(v) => v, None => return CellValue::Error(CellError::Value) };
+    match parse_complex(&s) {
+        Some((r, i)) => {
+            let mag = (r*r + i*i).sqrt();
+            let arg = i.atan2(r);
+            let new_mag = mag.powf(n);
+            let new_arg = arg * n;
+            CellValue::String(format_complex(new_mag * new_arg.cos(), new_mag * new_arg.sin()).into())
+        }
+        None => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_imsqrt(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    match parse_complex(&s) {
+        Some((r, i)) => {
+            let mag = (r*r + i*i).sqrt().sqrt();
+            let arg = i.atan2(r) / 2.0;
+            CellValue::String(format_complex(mag * arg.cos(), mag * arg.sin()).into())
+        }
+        None => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_imconjugate(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    match parse_complex(&s) {
+        Some((r, i)) => CellValue::String(format_complex(r, -i).into()),
+        None => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_imargument(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    match parse_complex(&s) {
+        Some((r, i)) => CellValue::Number(i.atan2(r)),
+        None => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_imln(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    match parse_complex(&s) {
+        Some((r, i)) => {
+            let mag = (r*r + i*i).sqrt();
+            let arg = i.atan2(r);
+            CellValue::String(format_complex(mag.ln(), arg).into())
+        }
+        None => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_imlog2(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    match parse_complex(&s) {
+        Some((r, i)) => {
+            let mag = (r*r + i*i).sqrt();
+            let arg = i.atan2(r);
+            let ln2 = 2.0_f64.ln();
+            CellValue::String(format_complex(mag.ln()/ln2, arg/ln2).into())
+        }
+        None => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_imlog10(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    match parse_complex(&s) {
+        Some((r, i)) => {
+            let mag = (r*r + i*i).sqrt();
+            let arg = i.atan2(r);
+            let ln10 = 10.0_f64.ln();
+            CellValue::String(format_complex(mag.ln()/ln10, arg/ln10).into())
+        }
+        None => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_imexp(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    match parse_complex(&s) {
+        Some((r, i)) => {
+            let er = r.exp();
+            CellValue::String(format_complex(er * i.cos(), er * i.sin()).into())
+        }
+        None => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_imsin(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    match parse_complex(&s) {
+        Some((r, i)) => CellValue::String(format_complex(r.sin() * i.cosh(), r.cos() * i.sinh()).into()),
+        None => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_imcos(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    match parse_complex(&s) {
+        Some((r, i)) => CellValue::String(format_complex(r.cos() * i.cosh(), -(r.sin() * i.sinh())).into()),
+        None => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_erf_precise(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let x = match eval_f64(&args[0], ctx, reg) { Some(v) => v, None => return CellValue::Error(CellError::Value) };
+    CellValue::Number(erf_approx(x))
+}
+
+fn fn_erfc_precise(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let x = match eval_f64(&args[0], ctx, reg) { Some(v) => v, None => return CellValue::Error(CellError::Value) };
+    CellValue::Number(1.0 - erf_approx(x))
+}
+
+fn fn_imtan(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    let (a, b) = match parse_complex(&s) { Some(v) => v, None => return CellValue::Error(CellError::Num) };
+    let sin_r = a.sin() * b.cosh();
+    let sin_i = a.cos() * b.sinh();
+    let cos_r = a.cos() * b.cosh();
+    let cos_i = -(a.sin() * b.sinh());
+    let denom = cos_r * cos_r + cos_i * cos_i;
+    if denom == 0.0 { return CellValue::Error(CellError::Num); }
+    let r = (sin_r * cos_r + sin_i * cos_i) / denom;
+    let i = (sin_i * cos_r - sin_r * cos_i) / denom;
+    CellValue::String(format_complex(r, i).into())
+}
+
+fn fn_imsec(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    let (a, b) = match parse_complex(&s) { Some(v) => v, None => return CellValue::Error(CellError::Num) };
+    let cos_r = a.cos() * b.cosh();
+    let cos_i = -(a.sin() * b.sinh());
+    let denom = cos_r * cos_r + cos_i * cos_i;
+    if denom == 0.0 { return CellValue::Error(CellError::Num); }
+    CellValue::String(format_complex(cos_r / denom, -cos_i / denom).into())
+}
+
+fn fn_imcsc(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    let (a, b) = match parse_complex(&s) { Some(v) => v, None => return CellValue::Error(CellError::Num) };
+    let sin_r = a.sin() * b.cosh();
+    let sin_i = a.cos() * b.sinh();
+    let denom = sin_r * sin_r + sin_i * sin_i;
+    if denom == 0.0 { return CellValue::Error(CellError::Num); }
+    CellValue::String(format_complex(sin_r / denom, -sin_i / denom).into())
+}
+
+fn fn_imcot(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    let (a, b) = match parse_complex(&s) { Some(v) => v, None => return CellValue::Error(CellError::Num) };
+    let sin_r = a.sin() * b.cosh();
+    let sin_i = a.cos() * b.sinh();
+    let cos_r = a.cos() * b.cosh();
+    let cos_i = -(a.sin() * b.sinh());
+    let denom = sin_r * sin_r + sin_i * sin_i;
+    if denom == 0.0 { return CellValue::Error(CellError::Num); }
+    let r = (cos_r * sin_r + cos_i * sin_i) / denom;
+    let i = (cos_i * sin_r - cos_r * sin_i) / denom;
+    CellValue::String(format_complex(r, i).into())
+}
+
+fn fn_imsinh(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    let (a, b) = match parse_complex(&s) { Some(v) => v, None => return CellValue::Error(CellError::Num) };
+    // sinh(a+bi) = sinh(a)cos(b) + i*cosh(a)sin(b)
+    let r = a.sinh() * b.cos();
+    let i = a.cosh() * b.sin();
+    CellValue::String(format_complex(r, i).into())
+}
+
+fn fn_imcosh(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_str(&args[0], ctx, reg);
+    let (a, b) = match parse_complex(&s) { Some(v) => v, None => return CellValue::Error(CellError::Num) };
+    // cosh(a+bi) = cosh(a)cos(b) + i*sinh(a)sin(b)
+    let r = a.cosh() * b.cos();
+    let i = a.sinh() * b.sin();
+    CellValue::String(format_complex(r, i).into())
+}
+
+fn fn_besseli(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let x = match eval_f64(&args[0], ctx, reg) { Some(v) => v, None => return CellValue::Error(CellError::Value) };
+    let n = match eval_f64(&args[1], ctx, reg) { Some(v) => v as i64, None => return CellValue::Error(CellError::Value) };
+    match n {
+        0 => {
+            // I0 approximation: sum x^(2k)/(4^k * (k!)^2) for k=0..10
+            let mut sum = 1.0;
+            let mut term = 1.0;
+            for k in 1..=10 {
+                term *= (x * x) / (4.0 * (k as f64) * (k as f64));
+                sum += term;
+            }
+            CellValue::Number(sum)
+        }
+        1 => {
+            // I1 approximation: x/2 * sum (x^2/4)^k / (k! * (k+1)!) for k=0..10
+            let mut sum = 1.0;
+            let mut term = 1.0;
+            for k in 1..=10 {
+                term *= (x * x) / (4.0 * (k as f64) * ((k + 1) as f64));
+                sum += term;
+            }
+            CellValue::Number(sum * x / 2.0)
+        }
+        _ => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_besselj(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let x = match eval_f64(&args[0], ctx, reg) { Some(v) => v, None => return CellValue::Error(CellError::Value) };
+    let n = match eval_f64(&args[1], ctx, reg) { Some(v) => v as i64, None => return CellValue::Error(CellError::Value) };
+    match n {
+        0 => {
+            // J0 approximation: sum (-1)^k * (x/2)^(2k) / (k!)^2 for k=0..10
+            let mut sum = 1.0;
+            let mut term = 1.0;
+            for k in 1..=10 {
+                term *= -(x * x) / (4.0 * (k as f64) * (k as f64));
+                sum += term;
+            }
+            CellValue::Number(sum)
+        }
+        1 => {
+            // J1 approximation: x/2 * sum (-1)^k * (x^2/4)^k / (k! * (k+1)!) for k=0..10
+            let mut sum = 1.0;
+            let mut term = 1.0;
+            for k in 1..=10 {
+                term *= -(x * x) / (4.0 * (k as f64) * ((k + 1) as f64));
+                sum += term;
+            }
+            CellValue::Number(sum * x / 2.0)
+        }
+        _ => CellValue::Error(CellError::Num),
+    }
+}
+
+fn fn_besselk(args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    let _ = args;
+    CellValue::Error(CellError::Na)
+}
+
+fn fn_bessely(args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    let _ = args;
+    CellValue::Error(CellError::Na)
+}
+
 fn to_si_factor(unit: &str) -> Option<(f64, f64, &'static str)> {
     // (multiplier, offset, group)
     match unit {
@@ -369,4 +693,28 @@ fn to_si_factor(unit: &str) -> Option<(f64, f64, &'static str)> {
         "yr" => Some((31557600.0, 0.0, "time")),
         _ => None,
     }
+}
+
+fn fn_imcsch(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = evaluate(&args[0], ctx, reg).display_value();
+    let (a, b) = match parse_complex(&s) { Some(v) => v, None => return CellValue::Error(CellError::Num) };
+    let sinh_r = a.sinh() * b.cos();
+    let sinh_i = a.cosh() * b.sin();
+    let denom = sinh_r * sinh_r + sinh_i * sinh_i;
+    if denom == 0.0 { return CellValue::Error(CellError::Num); }
+    let r = sinh_r / denom;
+    let i = -sinh_i / denom;
+    CellValue::String(format_complex(r, i).into())
+}
+
+fn fn_imsech(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = evaluate(&args[0], ctx, reg).display_value();
+    let (a, b) = match parse_complex(&s) { Some(v) => v, None => return CellValue::Error(CellError::Num) };
+    let cosh_r = a.cosh() * b.cos();
+    let cosh_i = a.sinh() * b.sin();
+    let denom = cosh_r * cosh_r + cosh_i * cosh_i;
+    if denom == 0.0 { return CellValue::Error(CellError::Num); }
+    let r = cosh_r / denom;
+    let i = -cosh_i / denom;
+    CellValue::String(format_complex(r, i).into())
 }

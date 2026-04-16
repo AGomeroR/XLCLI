@@ -8,6 +8,7 @@ pub trait EvalContext {
     fn get_cell_value(&self, addr: CellAddr) -> CellValue;
     fn current_cell(&self) -> CellAddr;
     fn current_sheet(&self) -> u16;
+    fn resolve_sheet(&self, name: &str) -> Option<u16>;
 }
 
 pub fn evaluate(expr: &Expr, ctx: &dyn EvalContext, registry: &FunctionRegistry) -> CellValue {
@@ -17,8 +18,15 @@ pub fn evaluate(expr: &Expr, ctx: &dyn EvalContext, registry: &FunctionRegistry)
         Expr::Boolean(b) => CellValue::Boolean(*b),
         Expr::Error(e) => CellValue::Error(*e),
 
-        Expr::CellRef { sheet: _, col, row } => {
-            let addr = CellAddr::new(ctx.current_sheet(), row.value(), col.value());
+        Expr::CellRef { sheet, col, row } => {
+            let sheet_idx = match sheet {
+                Some(name) => match ctx.resolve_sheet(name) {
+                    Some(idx) => idx,
+                    None => return CellValue::Error(CellError::Ref),
+                },
+                None => ctx.current_sheet(),
+            };
+            let addr = CellAddr::new(sheet_idx, row.value(), col.value());
             ctx.get_cell_value(addr)
         }
 
@@ -132,8 +140,8 @@ pub fn collect_range_values(
     end: &Expr,
     ctx: &dyn EvalContext,
 ) -> Vec<CellValue> {
-    let (sr, sc) = match start {
-        Expr::CellRef { row, col, .. } => (row.value(), col.value()),
+    let (sr, sc, sheet_name) = match start {
+        Expr::CellRef { row, col, sheet } => (row.value(), col.value(), sheet.clone()),
         _ => return vec![],
     };
     let (er, ec) = match end {
@@ -145,7 +153,10 @@ pub fn collect_range_values(
     let max_r = sr.max(er);
     let min_c = sc.min(ec);
     let max_c = sc.max(ec);
-    let sheet = ctx.current_sheet();
+    let sheet = match sheet_name {
+        Some(ref name) => ctx.resolve_sheet(name).unwrap_or(ctx.current_sheet()),
+        None => ctx.current_sheet(),
+    };
 
     let mut values = Vec::new();
     for r in min_r..=max_r {

@@ -26,6 +26,13 @@ pub fn register(reg: &mut FunctionRegistry) {
     reg.register(FnSpec { name: "EOMONTH", description: "Returns last day of month offset", syntax: "EOMONTH(start_date, months)", min_args: 2, max_args: Some(2), eval: fn_eomonth });
     reg.register(FnSpec { name: "DATEDIF", description: "Returns difference between two dates", syntax: "DATEDIF(start_date, end_date, unit)", min_args: 3, max_args: Some(3), eval: fn_datedif });
     reg.register(FnSpec { name: "ISOWEEKNUM", description: "Returns ISO week number", syntax: "ISOWEEKNUM(date)", min_args: 1, max_args: Some(1), eval: fn_isoweeknum });
+    reg.register(FnSpec { name: "TIMEVALUE", description: "Converts time text to serial number", syntax: "TIMEVALUE(time_text)", min_args: 1, max_args: Some(1), eval: fn_timevalue });
+    reg.register(FnSpec { name: "WORKDAY", description: "Returns date offset by work days", syntax: "WORKDAY(start_date, days, [holidays])", min_args: 2, max_args: Some(3), eval: fn_workday });
+    reg.register(FnSpec { name: "WORKDAY.INTL", description: "Returns date offset by work days with custom weekends", syntax: "WORKDAY.INTL(start_date, days, [weekend], [holidays])", min_args: 2, max_args: Some(4), eval: fn_workday_intl });
+    reg.register(FnSpec { name: "NETWORKDAYS", description: "Returns number of work days between dates", syntax: "NETWORKDAYS(start_date, end_date, [holidays])", min_args: 2, max_args: Some(3), eval: fn_networkdays });
+    reg.register(FnSpec { name: "NETWORKDAYS.INTL", description: "Returns work days with custom weekends", syntax: "NETWORKDAYS.INTL(start_date, end_date, [weekend], [holidays])", min_args: 2, max_args: Some(4), eval: fn_networkdays_intl });
+    reg.register(FnSpec { name: "YEARFRAC", description: "Returns fraction of year between dates", syntax: "YEARFRAC(start_date, end_date, [basis])", min_args: 2, max_args: Some(3), eval: fn_yearfrac });
+    reg.register(FnSpec { name: "DAYS360", description: "Returns days between dates using 360-day year", syntax: "DAYS360(start_date, end_date, [method])", min_args: 2, max_args: Some(3), eval: fn_days360 });
 }
 
 const EXCEL_EPOCH: i64 = 25569; // days between 1899-12-30 and 1970-01-01
@@ -293,4 +300,103 @@ fn days_in_month(year: i32, month: u32) -> u32 {
         }
         _ => 30,
     }
+}
+
+fn fn_timevalue(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = evaluate(&args[0], ctx, reg).display_value();
+    // Try common time formats
+    let formats = ["%H:%M:%S", "%H:%M", "%I:%M:%S %p", "%I:%M %p"];
+    for fmt in &formats {
+        if let Ok(time) = NaiveTime::parse_from_str(&s, fmt) {
+            let secs = time.num_seconds_from_midnight();
+            return CellValue::Number(secs as f64 / 86400.0);
+        }
+    }
+    CellValue::Error(CellError::Value)
+}
+
+fn is_weekend(date: NaiveDate) -> bool {
+    let wd = date.weekday().num_days_from_monday(); // 0=Mon..6=Sun
+    wd >= 5
+}
+
+fn fn_workday(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let start = match eval_as_serial(&args[0], ctx, reg).and_then(serial_to_date) {
+        Some(d) => d, None => return CellValue::Error(CellError::Value),
+    };
+    let days = match evaluate(&args[1], ctx, reg).as_f64() {
+        Some(n) => n as i32, None => return CellValue::Error(CellError::Value),
+    };
+    let mut current = start;
+    let mut remaining = days.abs();
+    let direction = if days >= 0 { 1 } else { -1 };
+    while remaining > 0 {
+        current += Duration::days(direction as i64);
+        if !is_weekend(current) {
+            remaining -= 1;
+        }
+    }
+    CellValue::Number(date_to_serial(current))
+}
+
+fn fn_workday_intl(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    // Same as WORKDAY for simplicity (use standard weekends)
+    fn_workday(args, ctx, reg)
+}
+
+fn fn_networkdays(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let start = match eval_as_serial(&args[0], ctx, reg).and_then(serial_to_date) {
+        Some(d) => d, None => return CellValue::Error(CellError::Value),
+    };
+    let end = match eval_as_serial(&args[1], ctx, reg).and_then(serial_to_date) {
+        Some(d) => d, None => return CellValue::Error(CellError::Value),
+    };
+    let (s, e) = if start <= end { (start, end) } else { (end, start) };
+    let mut count = 0i32;
+    let mut current = s;
+    while current <= e {
+        if !is_weekend(current) { count += 1; }
+        current += Duration::days(1);
+    }
+    if start > end { count = -count; }
+    CellValue::Number(count as f64)
+}
+
+fn fn_networkdays_intl(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    fn_networkdays(args, ctx, reg)
+}
+
+fn fn_yearfrac(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let start = match eval_as_serial(&args[0], ctx, reg).and_then(serial_to_date) {
+        Some(d) => d, None => return CellValue::Error(CellError::Value),
+    };
+    let end = match eval_as_serial(&args[1], ctx, reg).and_then(serial_to_date) {
+        Some(d) => d, None => return CellValue::Error(CellError::Value),
+    };
+    let basis = if args.len() > 2 { evaluate(&args[2], ctx, reg).as_f64().unwrap_or(0.0) as i32 } else { 0 };
+    let days = (end - start).num_days().abs() as f64;
+    let result = match basis {
+        0 => days / 360.0,  // US (NASD) 30/360
+        1 => days / (if start.year() == end.year() { if NaiveDate::from_ymd_opt(start.year(), 1, 1).map(|d| d.leap_year()).unwrap_or(false) { 366.0 } else { 365.0 } } else { 365.25 }),
+        2 => days / 360.0,
+        3 => days / 365.0,
+        4 => days / 360.0,  // European 30/360
+        _ => return CellValue::Error(CellError::Num),
+    };
+    CellValue::Number(result)
+}
+
+fn fn_days360(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let start = match eval_as_serial(&args[0], ctx, reg).and_then(serial_to_date) {
+        Some(d) => d, None => return CellValue::Error(CellError::Value),
+    };
+    let end = match eval_as_serial(&args[1], ctx, reg).and_then(serial_to_date) {
+        Some(d) => d, None => return CellValue::Error(CellError::Value),
+    };
+    let mut sd = start.day().min(30) as i32;
+    let mut ed = end.day() as i32;
+    if sd == 30 && ed == 31 { ed = 30; }
+    if sd == 31 { sd = 30; }
+    let result = (end.year() - start.year()) * 360 + (end.month() as i32 - start.month() as i32) * 30 + (ed - sd);
+    CellValue::Number(result as f64)
 }

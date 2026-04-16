@@ -150,14 +150,13 @@ fn render_grid(frame: &mut Frame, app: &App, area: Rect) {
                     .unwrap_or_default()
             };
 
-            let display = if cell_text.len() > vp.col_width as usize - 1 {
-                format!(
-                    "{:<width$}",
-                    &cell_text[..vp.col_width as usize - 2],
-                    width = vp.col_width as usize - 1
-                )
+            let max_chars = vp.col_width as usize;
+            let char_count = cell_text.chars().count();
+            let display = if char_count > max_chars - 1 {
+                let truncated: String = cell_text.chars().take(max_chars - 2).collect();
+                format!("{:<width$}", truncated, width = max_chars - 1)
             } else {
-                format!("{:<width$}", cell_text, width = vp.col_width as usize)
+                format!("{:<width$}", cell_text, width = max_chars)
             };
 
             let style = if is_cursor {
@@ -219,6 +218,9 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         String::new()
     };
 
+    let undo_indicator = if app.undo_stack.can_undo() { "u" } else { "-" };
+    let redo_indicator = if app.undo_stack.can_redo() { "r" } else { "-" };
+
     let line = Line::from(vec![
         Span::styled(format!(" {} ", app.mode.label()), mode_style),
         Span::raw(" "),
@@ -228,6 +230,11 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         Span::raw(" | "),
         Span::styled(file_name, Style::default().fg(Color::DarkGray)),
         Span::styled(modified_marker, Style::default().fg(Color::Red)),
+        Span::raw(" "),
+        Span::styled(
+            format!("[{}{}]", undo_indicator, redo_indicator),
+            Style::default().fg(Color::DarkGray),
+        ),
         Span::raw("  "),
         Span::raw(status),
     ]);

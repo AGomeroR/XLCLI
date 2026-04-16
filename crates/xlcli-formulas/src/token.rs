@@ -23,6 +23,12 @@ pub enum Token<'src> {
     #[regex(r"[A-Za-z_][A-Za-z0-9_.]*", check_func_name)]
     FuncName(&'src str),
 
+    #[regex(r"'[^']+'\!\$?[A-Za-z]{1,3}\$?[0-9]+")]
+    SheetRefQuoted(&'src str),
+
+    #[regex(r"[A-Za-z_][A-Za-z0-9_]*\!\$?[A-Za-z]{1,3}\$?[0-9]+", priority = 5)]
+    SheetRef(&'src str),
+
     #[regex(r"\$?[A-Za-z]{1,3}\$?[0-9]+")]
     CellRef(&'src str),
 

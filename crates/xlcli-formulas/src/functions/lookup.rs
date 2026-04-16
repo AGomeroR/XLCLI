@@ -19,6 +19,29 @@ pub fn register(reg: &mut FunctionRegistry) {
     reg.register(FnSpec { name: "ADDRESS", description: "Creates a cell address as text", syntax: "ADDRESS(row_num, col_num, [abs_num], [a1], [sheet])", min_args: 2, max_args: Some(5), eval: fn_address });
     reg.register(FnSpec { name: "INDIRECT", description: "Returns reference from text string", syntax: "INDIRECT(ref_text, [a1])", min_args: 1, max_args: Some(2), eval: fn_indirect });
     reg.register(FnSpec { name: "OFFSET", description: "Returns a range offset from a reference", syntax: "OFFSET(reference, rows, cols, [height], [width])", min_args: 3, max_args: Some(5), eval: fn_offset });
+    reg.register(FnSpec { name: "TRANSPOSE", description: "Transposes rows and columns", syntax: "TRANSPOSE(array)", min_args: 1, max_args: Some(1), eval: fn_transpose });
+    reg.register(FnSpec { name: "XMATCH", description: "Returns position using match mode", syntax: "XMATCH(lookup_value, lookup_array, [match_mode], [search_mode])", min_args: 2, max_args: Some(4), eval: fn_xmatch });
+    reg.register(FnSpec { name: "LOOKUP", description: "Looks up value in one range", syntax: "LOOKUP(lookup_value, lookup_vector, [result_vector])", min_args: 2, max_args: Some(3), eval: fn_lookup });
+    reg.register(FnSpec { name: "SORT", description: "Sorts a range or array", syntax: "SORT(array, [sort_index], [sort_order], [by_col])", min_args: 1, max_args: Some(4), eval: fn_sort });
+    reg.register(FnSpec { name: "UNIQUE", description: "Returns unique values", syntax: "UNIQUE(array, [by_col], [exactly_once])", min_args: 1, max_args: Some(3), eval: fn_unique });
+    reg.register(FnSpec { name: "SEQUENCE", description: "Generates a sequence of numbers", syntax: "SEQUENCE(rows, [columns], [start], [step])", min_args: 1, max_args: Some(4), eval: fn_sequence });
+    reg.register(FnSpec { name: "FILTER", description: "Filters array by conditions", syntax: "FILTER(array, include, [if_empty])", min_args: 2, max_args: Some(3), eval: fn_filter });
+    reg.register(FnSpec { name: "SORTBY", description: "Sorts array by another array", syntax: "SORTBY(array, by_array1, [sort_order1], ...)", min_args: 2, max_args: None, eval: fn_sortby });
+    reg.register(FnSpec { name: "TAKE", description: "Returns rows/cols from start or end", syntax: "TAKE(array, rows, [columns])", min_args: 2, max_args: Some(3), eval: fn_take });
+    reg.register(FnSpec { name: "DROP", description: "Drops rows/cols from start or end", syntax: "DROP(array, rows, [columns])", min_args: 2, max_args: Some(3), eval: fn_drop });
+    reg.register(FnSpec { name: "TOCOL", description: "Returns array as single column", syntax: "TOCOL(array, [ignore], [scan_by_column])", min_args: 1, max_args: Some(3), eval: fn_tocol });
+    reg.register(FnSpec { name: "TOROW", description: "Returns array as single row", syntax: "TOROW(array, [ignore], [scan_by_column])", min_args: 1, max_args: Some(3), eval: fn_torow });
+    reg.register(FnSpec { name: "WRAPROWS", description: "Wraps row of values into rows", syntax: "WRAPROWS(vector, wrap_count, [pad_with])", min_args: 2, max_args: Some(3), eval: fn_wraprows });
+    reg.register(FnSpec { name: "WRAPCOLS", description: "Wraps row of values into columns", syntax: "WRAPCOLS(vector, wrap_count, [pad_with])", min_args: 2, max_args: Some(3), eval: fn_wrapcols });
+    reg.register(FnSpec { name: "CHOOSECOLS", description: "Returns specified columns from array", syntax: "CHOOSECOLS(array, col_num1, [col_num2], ...)", min_args: 2, max_args: None, eval: fn_choosecols });
+    reg.register(FnSpec { name: "CHOOSEROWS", description: "Returns specified rows from array", syntax: "CHOOSEROWS(array, row_num1, [row_num2], ...)", min_args: 2, max_args: None, eval: fn_chooserows });
+    reg.register(FnSpec { name: "AREAS", description: "Returns number of areas in reference", syntax: "AREAS(reference)", min_args: 1, max_args: Some(1), eval: fn_areas });
+    reg.register(FnSpec { name: "HYPERLINK", description: "Creates a hyperlink", syntax: "HYPERLINK(link_location, [friendly_name])", min_args: 1, max_args: Some(2), eval: fn_hyperlink });
+    reg.register(FnSpec { name: "GETPIVOTDATA", description: "Returns data from a PivotTable", syntax: "GETPIVOTDATA(data_field, pivot_table, ...)", min_args: 2, max_args: None, eval: fn_getpivotdata });
+    reg.register(FnSpec { name: "RTD", description: "Returns real-time data", syntax: "RTD(progID, server, topic1, ...)", min_args: 3, max_args: None, eval: fn_rtd });
+    reg.register(FnSpec { name: "EXPAND", description: "Expands array to specified dimensions", syntax: "EXPAND(array, rows, [columns], [pad_with])", min_args: 2, max_args: Some(4), eval: fn_expand });
+    reg.register(FnSpec { name: "HSTACK", description: "Stacks arrays horizontally", syntax: "HSTACK(array1, [array2], ...)", min_args: 1, max_args: None, eval: fn_hstack });
+    reg.register(FnSpec { name: "VSTACK", description: "Stacks arrays vertically", syntax: "VSTACK(array1, [array2], ...)", min_args: 1, max_args: None, eval: fn_vstack });
 }
 
 fn range_dims(start: &Expr, end: &Expr) -> Option<(u32, u16, u32, u16)> {
@@ -362,6 +385,411 @@ fn fn_indirect(_args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) 
 }
 
 fn fn_offset(_args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
-    // OFFSET requires dynamic range creation — stub for now
     CellValue::Error(CellError::Ref)
+}
+
+fn fn_transpose(args: &[Expr], ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    let (sr, sc, er, ec) = match &args[0] {
+        Expr::Range { start, end } => match range_dims(start, end) {
+            Some(d) => d,
+            None => return CellValue::Error(CellError::Value),
+        },
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let rows = (er - sr + 1) as usize;
+    let cols = (ec - sc + 1) as usize;
+    let sheet = ctx.current_sheet();
+    let mut result = vec![vec![CellValue::Empty; rows]; cols];
+    for r in 0..rows {
+        for c in 0..cols {
+            result[c][r] = ctx.get_cell_value(CellAddr::new(sheet, sr + r as u32, sc + c as u16));
+        }
+    }
+    CellValue::Array(Box::new(result))
+}
+
+fn fn_xmatch(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let lookup = evaluate(&args[0], ctx, reg);
+    let values = match &args[1] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let match_mode = if args.len() > 2 {
+        evaluate(&args[2], ctx, reg).as_f64().unwrap_or(0.0) as i32
+    } else { 0 };
+
+    let lookup_str = lookup.display_value();
+    match match_mode {
+        0 => {
+            for (i, v) in values.iter().enumerate() {
+                if v.display_value().eq_ignore_ascii_case(&lookup_str) {
+                    return CellValue::Number((i + 1) as f64);
+                }
+            }
+            CellValue::Error(CellError::Na)
+        }
+        -1 => {
+            let lookup_n = lookup.as_f64();
+            let mut best: Option<(usize, f64)> = None;
+            for (i, v) in values.iter().enumerate() {
+                if let (Some(ln), Some(vn)) = (lookup_n, v.as_f64()) {
+                    if vn <= ln {
+                        if best.is_none() || vn > best.unwrap().1 { best = Some((i, vn)); }
+                    }
+                }
+            }
+            match best {
+                Some((i, _)) => CellValue::Number((i + 1) as f64),
+                None => CellValue::Error(CellError::Na),
+            }
+        }
+        1 => {
+            let lookup_n = lookup.as_f64();
+            let mut best: Option<(usize, f64)> = None;
+            for (i, v) in values.iter().enumerate() {
+                if let (Some(ln), Some(vn)) = (lookup_n, v.as_f64()) {
+                    if vn >= ln {
+                        if best.is_none() || vn < best.unwrap().1 { best = Some((i, vn)); }
+                    }
+                }
+            }
+            match best {
+                Some((i, _)) => CellValue::Number((i + 1) as f64),
+                None => CellValue::Error(CellError::Na),
+            }
+        }
+        _ => CellValue::Error(CellError::Value),
+    }
+}
+
+fn fn_lookup(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let lookup = evaluate(&args[0], ctx, reg);
+    let lookup_vec = match &args[1] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let result_vec = if args.len() > 2 {
+        match &args[2] {
+            Expr::Range { start, end } => collect_range_values(start, end, ctx),
+            _ => return CellValue::Error(CellError::Value),
+        }
+    } else {
+        lookup_vec.clone()
+    };
+
+    let lookup_n = lookup.as_f64();
+    let mut last_match = None;
+    for (i, v) in lookup_vec.iter().enumerate() {
+        if let (Some(ln), Some(vn)) = (lookup_n, v.as_f64()) {
+            if vn <= ln { last_match = Some(i); }
+        } else if v.display_value().eq_ignore_ascii_case(&lookup.display_value()) {
+            last_match = Some(i);
+        }
+    }
+    match last_match {
+        Some(i) => result_vec.get(i).cloned().unwrap_or(CellValue::Error(CellError::Na)),
+        None => CellValue::Error(CellError::Na),
+    }
+}
+
+fn fn_sort(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let order = if args.len() > 2 {
+        evaluate(&args[2], ctx, reg).as_f64().unwrap_or(1.0) as i32
+    } else { 1 };
+
+    let mut sorted = values;
+    sorted.sort_by(|a, b| {
+        let cmp = match (a.as_f64(), b.as_f64()) {
+            (Some(an), Some(bn)) => an.partial_cmp(&bn).unwrap_or(std::cmp::Ordering::Equal),
+            _ => a.display_value().cmp(&b.display_value()),
+        };
+        if order == -1 { cmp.reverse() } else { cmp }
+    });
+    let rows: Vec<Vec<CellValue>> = sorted.into_iter().map(|v| vec![v]).collect();
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_unique(args: &[Expr], ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let mut seen = std::collections::HashSet::new();
+    let mut unique = Vec::new();
+    for v in values {
+        let key = v.display_value();
+        if seen.insert(key) {
+            unique.push(v);
+        }
+    }
+    let rows: Vec<Vec<CellValue>> = unique.into_iter().map(|v| vec![v]).collect();
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_sequence(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let rows = match evaluate(&args[0], ctx, reg).as_f64() {
+        Some(n) if n >= 1.0 => n as usize,
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let cols = if args.len() > 1 {
+        match evaluate(&args[1], ctx, reg).as_f64() {
+            Some(n) if n >= 1.0 => n as usize,
+            _ => return CellValue::Error(CellError::Value),
+        }
+    } else { 1 };
+    let start = if args.len() > 2 { evaluate(&args[2], ctx, reg).as_f64().unwrap_or(1.0) } else { 1.0 };
+    let step = if args.len() > 3 { evaluate(&args[3], ctx, reg).as_f64().unwrap_or(1.0) } else { 1.0 };
+
+    let mut result = Vec::with_capacity(rows);
+    let mut val = start;
+    for _ in 0..rows {
+        let mut row = Vec::with_capacity(cols);
+        for _ in 0..cols {
+            row.push(CellValue::Number(val));
+            val += step;
+        }
+        result.push(row);
+    }
+    CellValue::Array(Box::new(result))
+}
+
+fn fn_filter(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let include = match &args[1] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let filtered: Vec<CellValue> = values.iter().enumerate()
+        .filter(|(i, _)| include.get(*i).and_then(|v| v.as_f64()).unwrap_or(0.0) != 0.0
+                        || matches!(include.get(*i), Some(CellValue::Boolean(true))))
+        .map(|(_, v)| v.clone())
+        .collect();
+    if filtered.is_empty() {
+        if args.len() > 2 { return evaluate(&args[2], ctx, reg); }
+        return CellValue::Error(CellError::Na);
+    }
+    let rows: Vec<Vec<CellValue>> = filtered.into_iter().map(|v| vec![v]).collect();
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_sortby(args: &[Expr], ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let keys = match &args[1] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let mut indexed: Vec<(usize, &CellValue)> = keys.iter().enumerate().collect();
+    indexed.sort_by(|a, b| {
+        match (a.1.as_f64(), b.1.as_f64()) {
+            (Some(an), Some(bn)) => an.partial_cmp(&bn).unwrap_or(std::cmp::Ordering::Equal),
+            _ => a.1.display_value().cmp(&b.1.display_value()),
+        }
+    });
+    let rows: Vec<Vec<CellValue>> = indexed.iter()
+        .filter_map(|(i, _)| values.get(*i).map(|v| vec![v.clone()]))
+        .collect();
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_take(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let n = match evaluate(&args[1], ctx, reg).as_f64() { Some(v) => v as i32, None => return CellValue::Error(CellError::Value) };
+    let taken: Vec<CellValue> = if n >= 0 {
+        values.into_iter().take(n as usize).collect()
+    } else {
+        let len = values.len();
+        let skip = len.saturating_sub((-n) as usize);
+        values.into_iter().skip(skip).collect()
+    };
+    let rows: Vec<Vec<CellValue>> = taken.into_iter().map(|v| vec![v]).collect();
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_drop(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let n = match evaluate(&args[1], ctx, reg).as_f64() { Some(v) => v as i32, None => return CellValue::Error(CellError::Value) };
+    let dropped: Vec<CellValue> = if n >= 0 {
+        values.into_iter().skip(n as usize).collect()
+    } else {
+        let len = values.len();
+        let take_count = len.saturating_sub((-n) as usize);
+        values.into_iter().take(take_count).collect()
+    };
+    let rows: Vec<Vec<CellValue>> = dropped.into_iter().map(|v| vec![v]).collect();
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_tocol(args: &[Expr], ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let rows: Vec<Vec<CellValue>> = values.into_iter().map(|v| vec![v]).collect();
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_torow(args: &[Expr], ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    CellValue::Array(Box::new(vec![values]))
+}
+
+fn fn_wraprows(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let wrap = match evaluate(&args[1], ctx, reg).as_f64() { Some(v) => v as usize, None => return CellValue::Error(CellError::Value) };
+    if wrap == 0 { return CellValue::Error(CellError::Value); }
+    let pad = if args.len() > 2 { evaluate(&args[2], ctx, reg) } else { CellValue::Error(CellError::Na) };
+    let mut rows = Vec::new();
+    for chunk in values.chunks(wrap) {
+        let mut row: Vec<CellValue> = chunk.to_vec();
+        while row.len() < wrap { row.push(pad.clone()); }
+        rows.push(row);
+    }
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_wrapcols(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let wrap = match evaluate(&args[1], ctx, reg).as_f64() { Some(v) => v as usize, None => return CellValue::Error(CellError::Value) };
+    if wrap == 0 { return CellValue::Error(CellError::Value); }
+    let pad = if args.len() > 2 { evaluate(&args[2], ctx, reg) } else { CellValue::Error(CellError::Na) };
+    let num_cols = (values.len() + wrap - 1) / wrap;
+    let mut rows = vec![vec![pad.clone(); num_cols]; wrap];
+    for (i, v) in values.into_iter().enumerate() {
+        let col = i / wrap;
+        let row = i % wrap;
+        rows[row][col] = v;
+    }
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_choosecols(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    // Simplified: works with flat range, returns selected elements
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let mut selected = Vec::new();
+    for arg in &args[1..] {
+        let idx = match evaluate(arg, ctx, reg).as_f64() { Some(v) => (v as usize).saturating_sub(1), None => return CellValue::Error(CellError::Value) };
+        selected.push(values.get(idx).cloned().unwrap_or(CellValue::Error(CellError::Na)));
+    }
+    let rows: Vec<Vec<CellValue>> = selected.into_iter().map(|v| vec![v]).collect();
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_areas(_args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    CellValue::Number(1.0)
+}
+
+fn fn_hyperlink(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    if args.len() > 1 {
+        evaluate(&args[1], ctx, reg)
+    } else {
+        let url = evaluate(&args[0], ctx, reg).display_value();
+        CellValue::String(url.into())
+    }
+}
+
+fn fn_getpivotdata(_args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    CellValue::Error(CellError::Na)
+}
+
+fn fn_rtd(_args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    CellValue::Error(CellError::Na)
+}
+
+fn fn_chooserows(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let mut selected = Vec::new();
+    for arg in &args[1..] {
+        let idx = match evaluate(arg, ctx, reg).as_f64() { Some(v) => (v as usize).saturating_sub(1), None => return CellValue::Error(CellError::Value) };
+        selected.push(values.get(idx).cloned().unwrap_or(CellValue::Error(CellError::Na)));
+    }
+    let rows: Vec<Vec<CellValue>> = selected.into_iter().map(|v| vec![v]).collect();
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_expand(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let values = match &args[0] {
+        Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        _ => return CellValue::Error(CellError::Value),
+    };
+    let target_rows = match evaluate(&args[1], ctx, reg).as_f64() { Some(v) => v as usize, None => return CellValue::Error(CellError::Value) };
+    let target_cols = if args.len() > 2 { evaluate(&args[2], ctx, reg).as_f64().unwrap_or(1.0) as usize } else { 1 };
+    let pad = if args.len() > 3 { evaluate(&args[3], ctx, reg) } else { CellValue::Error(CellError::Na) };
+    let mut rows = Vec::with_capacity(target_rows);
+    for r in 0..target_rows {
+        let mut row = Vec::with_capacity(target_cols);
+        for c in 0..target_cols {
+            let idx = r * target_cols + c;
+            row.push(values.get(idx).cloned().unwrap_or_else(|| pad.clone()));
+        }
+        rows.push(row);
+    }
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_hstack(args: &[Expr], ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    let mut all_cols: Vec<Vec<CellValue>> = Vec::new();
+    for arg in args {
+        let values = match arg {
+            Expr::Range { start, end } => collect_range_values(start, end, ctx),
+            _ => continue,
+        };
+        all_cols.push(values);
+    }
+    if all_cols.is_empty() { return CellValue::Error(CellError::Value); }
+    let max_len = all_cols.iter().map(|c| c.len()).max().unwrap_or(0);
+    let mut rows = Vec::with_capacity(max_len);
+    for i in 0..max_len {
+        let mut row = Vec::new();
+        for col in &all_cols {
+            row.push(col.get(i).cloned().unwrap_or(CellValue::Error(CellError::Na)));
+        }
+        rows.push(row);
+    }
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_vstack(args: &[Expr], ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    let mut all_values: Vec<Vec<CellValue>> = Vec::new();
+    for arg in args {
+        let values = match arg {
+            Expr::Range { start, end } => collect_range_values(start, end, ctx),
+            _ => continue,
+        };
+        for v in values {
+            all_values.push(vec![v]);
+        }
+    }
+    if all_values.is_empty() { return CellValue::Error(CellError::Value); }
+    CellValue::Array(Box::new(all_values))
 }

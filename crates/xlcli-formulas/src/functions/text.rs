@@ -30,6 +30,33 @@ pub fn register(reg: &mut FunctionRegistry) {
     reg.register(FnSpec { name: "CHAR", description: "Returns character from code number", syntax: "CHAR(number)", min_args: 1, max_args: Some(1), eval: fn_char });
     reg.register(FnSpec { name: "CODE", description: "Returns numeric code for a character", syntax: "CODE(text)", min_args: 1, max_args: Some(1), eval: fn_code });
     reg.register(FnSpec { name: "NUMBERVALUE", description: "Converts text to number with locale", syntax: "NUMBERVALUE(text, [decimal_sep], [group_sep])", min_args: 1, max_args: Some(3), eval: fn_numbervalue });
+    reg.register(FnSpec { name: "UNICHAR", description: "Returns Unicode character", syntax: "UNICHAR(number)", min_args: 1, max_args: Some(1), eval: fn_unichar });
+    reg.register(FnSpec { name: "UNICODE", description: "Returns Unicode code of first character", syntax: "UNICODE(text)", min_args: 1, max_args: Some(1), eval: fn_unicode });
+    reg.register(FnSpec { name: "FIXED", description: "Formats number with fixed decimals", syntax: "FIXED(number, [decimals], [no_commas])", min_args: 1, max_args: Some(3), eval: fn_fixed });
+    reg.register(FnSpec { name: "DOLLAR", description: "Formats number as currency text", syntax: "DOLLAR(number, [decimals])", min_args: 1, max_args: Some(2), eval: fn_dollar });
+    reg.register(FnSpec { name: "ENCODEURL", description: "URL-encodes a text string", syntax: "ENCODEURL(text)", min_args: 1, max_args: Some(1), eval: fn_encodeurl });
+    reg.register(FnSpec { name: "TEXTBEFORE", description: "Returns text before delimiter", syntax: "TEXTBEFORE(text, delimiter, [instance_num])", min_args: 2, max_args: Some(3), eval: fn_textbefore });
+    reg.register(FnSpec { name: "TEXTAFTER", description: "Returns text after delimiter", syntax: "TEXTAFTER(text, delimiter, [instance_num])", min_args: 2, max_args: Some(3), eval: fn_textafter });
+    reg.register(FnSpec { name: "TEXTSPLIT", description: "Splits text by delimiters", syntax: "TEXTSPLIT(text, col_delimiter, [row_delimiter])", min_args: 2, max_args: Some(3), eval: fn_textsplit });
+    reg.register(FnSpec { name: "VALUETOTEXT", description: "Returns text from any value", syntax: "VALUETOTEXT(value, [format])", min_args: 1, max_args: Some(2), eval: fn_valuetotext });
+    reg.register(FnSpec { name: "ARRAYTOTEXT", description: "Returns text from array", syntax: "ARRAYTOTEXT(array, [format])", min_args: 1, max_args: Some(2), eval: fn_arraytotext });
+    reg.register(FnSpec { name: "ASC", description: "Converts full-width to half-width", syntax: "ASC(text)", min_args: 1, max_args: Some(1), eval: fn_asc });
+    reg.register(FnSpec { name: "LEFTB", description: "Returns leftmost bytes of text", syntax: "LEFTB(text, [num_bytes])", min_args: 1, max_args: Some(2), eval: fn_left });
+    reg.register(FnSpec { name: "RIGHTB", description: "Returns rightmost bytes of text", syntax: "RIGHTB(text, [num_bytes])", min_args: 1, max_args: Some(2), eval: fn_right });
+    reg.register(FnSpec { name: "MIDB", description: "Returns bytes from middle of text", syntax: "MIDB(text, start_num, num_bytes)", min_args: 3, max_args: Some(3), eval: fn_mid });
+    reg.register(FnSpec { name: "LENB", description: "Returns number of bytes in text", syntax: "LENB(text)", min_args: 1, max_args: Some(1), eval: fn_len });
+    reg.register(FnSpec { name: "BAHTTEXT", description: "Converts number to Thai Baht text", syntax: "BAHTTEXT(number)", min_args: 1, max_args: Some(1), eval: fn_bahttext });
+    reg.register(FnSpec { name: "PHONETIC", description: "Returns phonetic (furigana) text", syntax: "PHONETIC(reference)", min_args: 1, max_args: Some(1), eval: fn_phonetic });
+    reg.register(FnSpec { name: "DBCS", description: "Converts half-width to full-width characters", syntax: "DBCS(text)", min_args: 1, max_args: Some(1), eval: fn_dbcs });
+    reg.register(FnSpec { name: "FORMULATEXT", description: "Returns formula as text", syntax: "FORMULATEXT(reference)", min_args: 1, max_args: Some(1), eval: fn_formulatext });
+    reg.register(FnSpec { name: "ISOMITTED", description: "Tests if argument is omitted", syntax: "ISOMITTED(argument)", min_args: 1, max_args: Some(1), eval: fn_isomitted });
+    reg.register(FnSpec { name: "REGEXTEST", description: "Tests if text matches regex pattern", syntax: "REGEXTEST(text, pattern)", min_args: 2, max_args: Some(2), eval: fn_regextest });
+    reg.register(FnSpec { name: "REGEXEXTRACT", description: "Extracts regex match from text", syntax: "REGEXEXTRACT(text, pattern)", min_args: 2, max_args: Some(2), eval: fn_regexextract });
+    reg.register(FnSpec { name: "REGEXREPLACE", description: "Replaces regex match in text", syntax: "REGEXREPLACE(text, pattern, replacement)", min_args: 3, max_args: Some(3), eval: fn_regexreplace });
+    reg.register(FnSpec { name: "FINDB", description: "Finds text position (byte-based)", syntax: "FINDB(find_text, within_text, [start_num])", min_args: 2, max_args: Some(3), eval: fn_find });
+    reg.register(FnSpec { name: "SEARCHB", description: "Searches text position (byte-based)", syntax: "SEARCHB(find_text, within_text, [start_num])", min_args: 2, max_args: Some(3), eval: fn_search });
+    reg.register(FnSpec { name: "REPLACEB", description: "Replaces text by position (byte-based)", syntax: "REPLACEB(old_text, start_num, num_bytes, new_text)", min_args: 4, max_args: Some(4), eval: fn_replace });
+    reg.register(FnSpec { name: "JIS", description: "Converts half-width to full-width characters", syntax: "JIS(text)", min_args: 1, max_args: Some(1), eval: fn_dbcs });
 }
 
 fn eval_to_string(expr: &Expr, ctx: &dyn EvalContext, reg: &FunctionRegistry) -> String {
@@ -306,4 +333,202 @@ fn fn_numbervalue(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) 
         Ok(n) => CellValue::Number(n),
         Err(_) => CellValue::Error(CellError::Value),
     }
+}
+
+fn fn_unichar(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    match eval_to_f64(&args[0], ctx, reg) {
+        Some(n) if n >= 1.0 => {
+            match char::from_u32(n as u32) {
+                Some(c) => CellValue::String(c.to_string().into()),
+                None => CellValue::Error(CellError::Value),
+            }
+        }
+        _ => CellValue::Error(CellError::Value),
+    }
+}
+
+fn fn_unicode(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_to_string(&args[0], ctx, reg);
+    match s.chars().next() {
+        Some(c) => CellValue::Number(c as u32 as f64),
+        None => CellValue::Error(CellError::Value),
+    }
+}
+
+fn fn_fixed(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let n = match eval_to_f64(&args[0], ctx, reg) { Some(n) => n, None => return CellValue::Error(CellError::Value) };
+    let decimals = if args.len() > 1 { eval_to_f64(&args[1], ctx, reg).unwrap_or(2.0) as usize } else { 2 };
+    let no_commas = if args.len() > 2 {
+        match evaluate(&args[2], ctx, reg) {
+            CellValue::Boolean(b) => b,
+            CellValue::Number(v) => v != 0.0,
+            _ => false,
+        }
+    } else { false };
+    let formatted = format!("{:.prec$}", n, prec = decimals);
+    if no_commas {
+        CellValue::String(formatted.into())
+    } else {
+        let parts: Vec<&str> = formatted.split('.').collect();
+        let int_part = parts[0];
+        let negative = int_part.starts_with('-');
+        let digits: String = int_part.chars().filter(|c| c.is_ascii_digit()).collect();
+        let mut with_commas = String::new();
+        for (i, c) in digits.chars().rev().enumerate() {
+            if i > 0 && i % 3 == 0 { with_commas.insert(0, ','); }
+            with_commas.insert(0, c);
+        }
+        if negative { with_commas.insert(0, '-'); }
+        if parts.len() > 1 {
+            with_commas.push('.');
+            with_commas.push_str(parts[1]);
+        }
+        CellValue::String(with_commas.into())
+    }
+}
+
+fn fn_dollar(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let n = match eval_to_f64(&args[0], ctx, reg) { Some(n) => n, None => return CellValue::Error(CellError::Value) };
+    let decimals = if args.len() > 1 { eval_to_f64(&args[1], ctx, reg).unwrap_or(2.0) as usize } else { 2 };
+    let formatted = format!("{:.prec$}", n.abs(), prec = decimals);
+    let parts: Vec<&str> = formatted.split('.').collect();
+    let digits: String = parts[0].chars().filter(|c| c.is_ascii_digit()).collect();
+    let mut with_commas = String::new();
+    for (i, c) in digits.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 { with_commas.insert(0, ','); }
+        with_commas.insert(0, c);
+    }
+    let mut result = String::from("$");
+    if n < 0.0 { result.insert(0, '-'); }
+    result.push_str(&with_commas);
+    if parts.len() > 1 {
+        result.push('.');
+        result.push_str(parts[1]);
+    }
+    CellValue::String(result.into())
+}
+
+fn fn_encodeurl(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_to_string(&args[0], ctx, reg);
+    let encoded: String = s.chars().map(|c| {
+        if c.is_ascii_alphanumeric() || "-._~".contains(c) {
+            c.to_string()
+        } else {
+            format!("%{:02X}", c as u32)
+        }
+    }).collect();
+    CellValue::String(encoded.into())
+}
+
+fn fn_textbefore(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let text = eval_to_string(&args[0], ctx, reg);
+    let delim = eval_to_string(&args[1], ctx, reg);
+    let instance = if args.len() > 2 { eval_to_f64(&args[2], ctx, reg).unwrap_or(1.0) as usize } else { 1 };
+    let mut start = 0;
+    for i in 0..instance {
+        match text[start..].find(&delim) {
+            Some(pos) => {
+                if i + 1 == instance { return CellValue::String(text[..start + pos].to_string().into()); }
+                start += pos + delim.len();
+            }
+            None => return CellValue::Error(CellError::Na),
+        }
+    }
+    CellValue::Error(CellError::Na)
+}
+
+fn fn_textafter(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let text = eval_to_string(&args[0], ctx, reg);
+    let delim = eval_to_string(&args[1], ctx, reg);
+    let instance = if args.len() > 2 { eval_to_f64(&args[2], ctx, reg).unwrap_or(1.0) as usize } else { 1 };
+    let mut start = 0;
+    for i in 0..instance {
+        match text[start..].find(&delim) {
+            Some(pos) => {
+                if i + 1 == instance { return CellValue::String(text[start + pos + delim.len()..].to_string().into()); }
+                start += pos + delim.len();
+            }
+            None => return CellValue::Error(CellError::Na),
+        }
+    }
+    CellValue::Error(CellError::Na)
+}
+
+fn fn_textsplit(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let text = eval_to_string(&args[0], ctx, reg);
+    let col_delim = eval_to_string(&args[1], ctx, reg);
+    let parts: Vec<CellValue> = text.split(&col_delim).map(|s| CellValue::String(s.to_string().into())).collect();
+    let rows: Vec<Vec<CellValue>> = parts.into_iter().map(|v| vec![v]).collect();
+    CellValue::Array(Box::new(rows))
+}
+
+fn fn_valuetotext(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let val = evaluate(&args[0], ctx, reg);
+    CellValue::String(val.display_value().into())
+}
+
+fn fn_arraytotext(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let val = evaluate(&args[0], ctx, reg);
+    CellValue::String(val.display_value().into())
+}
+
+fn fn_bahttext(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_to_string(&args[0], ctx, reg);
+    CellValue::String(s.into())
+}
+
+fn fn_phonetic(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_to_string(&args[0], ctx, reg);
+    CellValue::String(s.into())
+}
+
+fn fn_dbcs(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_to_string(&args[0], ctx, reg);
+    let converted: String = s.chars().map(|c| {
+        let code = c as u32;
+        if (0x21..=0x7E).contains(&code) {
+            char::from_u32(code - 0x21 + 0xFF01).unwrap_or(c)
+        } else if c == ' ' {
+            '\u{3000}'
+        } else {
+            c
+        }
+    }).collect();
+    CellValue::String(converted.into())
+}
+
+fn fn_formulatext(_args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    CellValue::Error(CellError::Na)
+}
+
+fn fn_isomitted(_args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    CellValue::Boolean(false)
+}
+
+fn fn_regextest(_args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    CellValue::Boolean(false)
+}
+
+fn fn_regexextract(_args: &[Expr], _ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
+    CellValue::Error(CellError::Na)
+}
+
+fn fn_regexreplace(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_to_string(&args[0], ctx, reg);
+    CellValue::String(s.into())
+}
+
+fn fn_asc(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {
+    let s = eval_to_string(&args[0], ctx, reg);
+    let converted: String = s.chars().map(|c| {
+        let code = c as u32;
+        if (0xFF01..=0xFF5E).contains(&code) {
+            char::from_u32(code - 0xFF01 + 0x21).unwrap_or(c)
+        } else if code == 0x3000 {
+            ' '
+        } else {
+            c
+        }
+    }).collect();
+    CellValue::String(converted.into())
 }

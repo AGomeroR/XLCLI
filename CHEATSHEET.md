@@ -44,12 +44,20 @@ xlcli has 4 modes, like Vim:
 
 ### Clipboard
 
-| Key  | Action                    |
-|------|---------------------------|
-| `yy` | Yank (copy) current cell  |
-| `p`  | Paste                     |
-| `dd` | Delete current cell       |
-| `x`  | Delete current cell       |
+| Key  | Action                                   |
+|------|------------------------------------------|
+| `yy` | Yank (copy) current cell                 |
+| `YY` | Yank with relative mode (adjusts refs)   |
+| `p`  | Paste (exact after `yy`, relative after `YY`) |
+| `dd` | Delete current cell                      |
+| `x`  | Delete current cell                      |
+
+### Fill
+
+| Key     | Action                                          |
+|---------|-------------------------------------------------|
+| `Alt+d` | Fill down — copy formula from cell above, adjust refs |
+| `Alt+r` | Fill right — copy formula from cell left, adjust refs |
 
 ### Undo / Redo
 
@@ -57,6 +65,17 @@ xlcli has 4 modes, like Vim:
 |----------|--------|
 | `u`      | Undo   |
 | `Ctrl+r` | Redo   |
+
+### Sheet Management
+
+| Key              | Action                                              |
+|------------------|-----------------------------------------------------|
+| `t`              | New sheet — opens command box to set name            |
+| `Alt+1`–`Alt+9`  | Switch to sheet 1–9 (Normal, Visual, Insert+formula)|
+
+During formula editing (`=`), `Alt+1`–`Alt+9` switches the view for cross-sheet ref browsing.
+Click a cell on the other sheet to insert `Sheet2!A1` style references.
+On confirm/cancel, returns to the formula's origin sheet.
 
 ### Other
 
@@ -103,6 +122,7 @@ Select a range of cells for bulk operations.
 | Arrow keys   | Extend selection            |
 | `y`          | Yank selection, exit Visual |
 | `d` / `x`   | Delete selection, exit Visual|
+| `f`          | Fill selection from top-left cell (adjusts refs) |
 | `Esc`        | Cancel selection            |
 
 ---
@@ -139,6 +159,23 @@ Press `:` to open the command palette (or inline status bar, depending on config
 | `:dr`              | Delete current row              |
 | `:delete row`      | Delete current row              |
 
+### Sheet Commands
+
+| Command                  | Action                                      |
+|--------------------------|---------------------------------------------|
+| `:sheet add`             | Add new sheet (auto-name Sheet2, Sheet3...) |
+| `:sheet add MySheet`     | Add new sheet with given name               |
+| `:sheet 1`               | Switch to sheet 1 (1-indexed)               |
+| `:sheet 3`               | Switch to sheet 3                           |
+| `:sheet MySheet`         | Switch to sheet by name                     |
+| `:sheet delete`          | Delete current sheet                        |
+| `:sheet delete 3`        | Delete sheet 3                              |
+| `:sheet rename old new`  | Rename sheet from "old" to "new"            |
+| `:sheet move left`       | Move current sheet one position left        |
+| `:sheet move right`      | Move current sheet one position right       |
+| `:sheet move 2`          | Move current sheet to position 2            |
+| `:sheet move 1 3`        | Move sheet 1 to position 3                  |
+
 ### Column Operations
 
 | Command              | Action                        |
@@ -152,7 +189,7 @@ Press `:` to open the command palette (or inline status bar, depending on config
 
 ---
 
-## Supported Formulas (195 total)
+## Supported Formulas (506 total)
 
 All formulas use `=` prefix. Ranges use colon syntax: `A1:B10`.
 Arguments separated by `,` or `;`.
@@ -312,13 +349,16 @@ Mouse works in all modes. Clicking while in Insert mode confirms the current edi
 
 ## Cell References
 
-| Syntax   | Type             | Example |
-|----------|------------------|---------|
-| `A1`     | Relative         | `=A1`   |
-| `$A1`    | Absolute column  | `=$A1`  |
-| `A$1`    | Absolute row     | `=A$1`  |
-| `$A$1`   | Fully absolute   | `=$A$1` |
-| `A1:B10` | Range            | `=SUM(A1:B10)` |
+| Syntax              | Type             | Example                    |
+|---------------------|------------------|----------------------------|
+| `A1`                | Relative         | `=A1`                      |
+| `$A1`               | Absolute column  | `=$A1`                     |
+| `A$1`               | Absolute row     | `=A$1`                     |
+| `$A$1`              | Fully absolute   | `=$A$1`                    |
+| `A1:B10`            | Range            | `=SUM(A1:B10)`             |
+| `Sheet2!A1`         | Cross-sheet ref  | `=Sheet2!A1`               |
+| `'My Sheet'!A1`     | Quoted sheet ref | `='My Sheet'!A1`           |
+| `Sheet2!A1:B10`     | Cross-sheet range| `=SUM(Sheet2!A1:B10)`      |
 
 ---
 

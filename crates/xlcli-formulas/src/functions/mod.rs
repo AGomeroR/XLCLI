@@ -7,6 +7,7 @@ pub mod info;
 pub mod date;
 pub mod financial;
 pub mod engineering;
+pub mod database;
 
 use crate::registry::FunctionRegistry;
 
@@ -20,4 +21,5 @@ pub fn register_all(reg: &mut FunctionRegistry) {
     date::register(reg);
     financial::register(reg);
     engineering::register(reg);
+    database::register(reg);
 }

@@ -1,5 +1,7 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
+use xlcli_core::types::CellAddr;
+
 use crate::app::App;
 use crate::mode::Mode;
 
@@ -50,6 +52,10 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
                 app.pending_key = Some('g');
             }
             return;
+        }
+        (KeyModifiers::ALT, KeyCode::Char(c @ '1'..='9')) => {
+            let idx = (c as usize) - ('1' as usize);
+            app.switch_sheet(idx);
         }
         (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
             app.jump_to_last_row();
@@ -133,6 +139,33 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
             app.move_cursor(0, -1);
         }
 
+        // Fill down / Fill right
+        (KeyModifiers::ALT, KeyCode::Char('d')) => {
+            app.fill_down();
+        }
+        (KeyModifiers::ALT, KeyCode::Char('r')) => {
+            app.fill_right();
+        }
+
+        // Relative yank (Y) — yank with relative-paste flag
+        (KeyModifiers::SHIFT, KeyCode::Char('Y')) => {
+            if app.pending_key == Some('Y') {
+                app.yank();
+                app.clipboard.set_relative(true);
+                app.status_message = Some("Yanked 1 cell (relative)".to_string());
+                app.pending_key = None;
+            } else {
+                app.pending_key = Some('Y');
+            }
+            return;
+        }
+
+        // New sheet — opens command box with prefilled name prompt
+        (KeyModifiers::NONE, KeyCode::Char('t')) => {
+            app.mode = Mode::Command;
+            app.command_buffer = "sheet add ".to_string();
+        }
+
         // Quit shortcut
         (KeyModifiers::NONE, KeyCode::Char('q')) => {
             if !app.modified {
@@ -171,6 +204,17 @@ fn handle_command(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_insert(app: &mut App, key: KeyEvent) {
+    // Ctrl+1-9: cross-sheet ref browsing (only during formula edit)
+    if key.modifiers.contains(KeyModifiers::ALT) {
+        if let KeyCode::Char(c @ '1'..='9') = key.code {
+            if app.edit_buffer.starts_with('=') {
+                let idx = (c as usize) - ('1' as usize);
+                app.switch_sheet_for_ref(idx);
+            }
+            return;
+        }
+    }
+
     if app.autocomplete.visible {
         match key.code {
             KeyCode::Tab | KeyCode::Enter => {
@@ -203,7 +247,7 @@ fn handle_insert(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Esc => {
             app.autocomplete.visible = false;
-            app.confirm_edit();
+            app.cancel_edit();
         }
         KeyCode::Enter => {
             app.confirm_edit();
@@ -227,11 +271,26 @@ fn handle_insert(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_visual(app: &mut App, key: KeyEvent) {
+    if let Some(pending) = app.pending_key {
+        match (pending, key.code) {
+            ('g', KeyCode::Char('g')) => {
+                app.cursor.row = 0;
+                app.pending_key = None;
+                return;
+            }
+            _ => { app.pending_key = None; }
+        }
+    }
+
     match (key.modifiers, key.code) {
         (_, KeyCode::Esc) => {
             app.visual_anchor = None;
             app.mode = Mode::Normal;
             app.status_message = None;
+        }
+        (KeyModifiers::ALT, KeyCode::Char(c @ '1'..='9')) => {
+            let idx = (c as usize) - ('1' as usize);
+            app.switch_sheet(idx);
         }
         (KeyModifiers::NONE, KeyCode::Char('h')) | (_, KeyCode::Left) => {
             app.move_cursor(0, -1);
@@ -245,11 +304,36 @@ fn handle_visual(app: &mut App, key: KeyEvent) {
         (KeyModifiers::NONE, KeyCode::Char('l')) | (_, KeyCode::Right) => {
             app.move_cursor(0, 1);
         }
+        (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
+            let last_row = app.workbook.active_sheet().row_count().saturating_sub(1);
+            app.cursor.row = last_row;
+        }
+        (KeyModifiers::NONE, KeyCode::Char('g')) => {
+            app.pending_key = Some('g');
+        }
+        (KeyModifiers::NONE, KeyCode::Char('0')) => {
+            app.jump_to_col_start();
+        }
+        (KeyModifiers::SHIFT, KeyCode::Char('$')) => {
+            app.jump_to_col_end();
+        }
+        (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
+            let half = (app.viewport.visible_rows / 2) as i32;
+            app.move_cursor(half, 0);
+        }
+        (KeyModifiers::CONTROL, KeyCode::Char('u')) => {
+            let half = (app.viewport.visible_rows / 2) as i32;
+            app.move_cursor(-half, 0);
+        }
         (KeyModifiers::NONE, KeyCode::Char('y')) => {
             app.yank_visual();
         }
         (KeyModifiers::NONE, KeyCode::Char('d')) | (KeyModifiers::NONE, KeyCode::Char('x')) => {
             app.delete_visual();
+        }
+        // Fill visual selection from top-left cell
+        (KeyModifiers::NONE, KeyCode::Char('f')) => {
+            app.visual_fill();
         }
         _ => {}
     }
@@ -265,15 +349,34 @@ fn handle_mouse(app: &mut App, mouse: MouseEvent) {
             let term_height = app.viewport.visible_rows as u16 + 4; // approx
             if y == term_height.saturating_sub(2) {
                 if let Some(idx) = sheet_tab_at(app, x) {
-                    app.workbook.active_sheet = idx;
-                    app.cursor.sheet = idx as u16;
-                    app.status_message = Some(format!("Sheet: {}", app.workbook.sheets[idx].name));
+                    if app.mode == Mode::Insert && app.edit_buffer.starts_with('=') {
+                        app.switch_sheet_for_ref(idx);
+                    } else {
+                        app.switch_sheet(idx);
+                    }
                     return;
                 }
             }
 
             // Click on grid cell
             if let Some((data_row, data_col)) = screen_to_cell(app, x, y) {
+                if app.mode == Mode::Insert && app.edit_buffer.starts_with('=') {
+                    let viewing_sheet = app.workbook.active_sheet as u16;
+                    let formula_sheet = app.formula_origin_sheet.unwrap_or(viewing_sheet);
+                    let cell_ref = if viewing_sheet != formula_sheet {
+                        let sheet_name = &app.workbook.sheets[viewing_sheet as usize].name;
+                        if sheet_name.contains(' ') {
+                            format!("'{}'!{}", sheet_name, CellAddr::new(viewing_sheet, data_row, data_col).display_name())
+                        } else {
+                            format!("{}!{}", sheet_name, CellAddr::new(viewing_sheet, data_row, data_col).display_name())
+                        }
+                    } else {
+                        CellAddr::new(viewing_sheet, data_row, data_col).display_name()
+                    };
+                    app.edit_buffer.push_str(&cell_ref);
+                    app.update_autocomplete();
+                    return;
+                }
                 if app.mode == Mode::Insert {
                     app.confirm_edit();
                 }

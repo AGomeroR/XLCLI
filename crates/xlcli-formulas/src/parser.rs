@@ -30,10 +30,6 @@ impl<'src> Parser<'src> {
         self.tokens.get(self.pos).map(|(t, _)| t)
     }
 
-    fn peek_slice(&self) -> Option<&'src str> {
-        self.tokens.get(self.pos).map(|(_, s)| *s)
-    }
-
     fn advance(&mut self) -> Option<(Token<'src>, &'src str)> {
         let tok = self.tokens.get(self.pos).cloned();
         self.pos += 1;
@@ -105,6 +101,36 @@ impl<'src> Parser<'src> {
             Some(Token::Boolean(..)) => {
                 let (_, slice) = self.advance().unwrap();
                 Ok(Expr::Boolean(slice.eq_ignore_ascii_case("true")))
+            }
+            Some(Token::SheetRefQuoted(..)) | Some(Token::SheetRef(..)) => {
+                let (_, slice) = self.advance().unwrap();
+                let cell = parse_sheet_cell_ref(slice)?;
+                if self.peek() == Some(&Token::Colon) {
+                    self.advance();
+                    match self.peek() {
+                        Some(Token::CellRef(..)) | Some(Token::SheetRef(..)) | Some(Token::SheetRefQuoted(..)) => {
+                            let (_, slice2) = self.advance().unwrap();
+                            let mut cell2 = if slice2.contains('!') {
+                                parse_sheet_cell_ref(slice2)?
+                            } else {
+                                parse_cell_ref(slice2)?
+                            };
+                            if let Expr::CellRef { ref mut sheet, .. } = cell2 {
+                                if sheet.is_none() {
+                                    if let Expr::CellRef { sheet: ref s, .. } = cell {
+                                        *sheet = s.clone();
+                                    }
+                                }
+                            }
+                            return Ok(Expr::Range {
+                                start: Box::new(cell),
+                                end: Box::new(cell2),
+                            });
+                        }
+                        _ => return Err("Expected cell reference after ':'".to_string()),
+                    }
+                }
+                Ok(cell)
             }
             Some(Token::CellRef(..)) => {
                 let (_, slice) = self.advance().unwrap();
@@ -204,6 +230,24 @@ fn infix_binding_power(op: BinOp) -> (u8, u8) {
         BinOp::Mul | BinOp::Div => (8, 9),
         BinOp::Pow => (11, 10), // right-associative
     }
+}
+
+fn parse_sheet_cell_ref(s: &str) -> Result<Expr, String> {
+    let bang_pos = s.rfind('!').ok_or("Missing '!' in sheet reference")?;
+    let sheet_part = &s[..bang_pos];
+    let cell_part = &s[bang_pos + 1..];
+
+    let sheet_name = if sheet_part.starts_with('\'') && sheet_part.ends_with('\'') {
+        sheet_part[1..sheet_part.len() - 1].to_string()
+    } else {
+        sheet_part.to_string()
+    };
+
+    let mut cell = parse_cell_ref(cell_part)?;
+    if let Expr::CellRef { ref mut sheet, .. } = cell {
+        *sheet = Some(sheet_name);
+    }
+    Ok(cell)
 }
 
 fn parse_cell_ref(s: &str) -> Result<Expr, String> {
