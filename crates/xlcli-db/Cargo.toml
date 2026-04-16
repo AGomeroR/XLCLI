@@ -1,0 +1,9 @@
+[package]
+name = "xlcli-db"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+xlcli-core = { workspace = true }
+thiserror = { workspace = true }

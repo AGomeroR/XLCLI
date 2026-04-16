@@ -1,0 +1,11 @@
+[package]
+name = "xlcli-formulas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+xlcli-core = { workspace = true }
+logos = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }

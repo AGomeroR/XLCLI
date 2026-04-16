@@ -1,0 +1,52 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+rust-version = "1.75"
+
+[workspace.dependencies]
+# Internal
+xlcli-core = { path = "crates/xlcli-core" }
+xlcli-formulas = { path = "crates/xlcli-formulas" }
+xlcli-io = { path = "crates/xlcli-io" }
+xlcli-python = { path = "crates/xlcli-python" }
+xlcli-db = { path = "crates/xlcli-db" }
+
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
+# File I/O
+calamine = { version = "0.26", features = ["dates"] }
+rust_xlsxwriter = "0.79"
+csv = "1.3"
+quick-xml = "0.37"
+zip = "2.2"
+
+# Formula engine
+logos = "0.14"
+petgraph = "0.6"
+
+# Data types
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+compact_str = "0.8"
+
+# Parallelism
+rayon = "1.10"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+
+# Collections
+indexmap = "2.7"

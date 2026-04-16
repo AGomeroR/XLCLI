@@ -1,0 +1,21 @@
+[package]
+name = "xlcli-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "xlcli"
+path = "src/main.rs"
+
+[dependencies]
+xlcli-core = { workspace = true }
+xlcli-formulas = { workspace = true }
+xlcli-io = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+toml = "0.8"
+dirs = "6.0"
