@@ -5,6 +5,15 @@ use std::path::PathBuf;
 #[serde(default)]
 pub struct Config {
     pub command_palette: CommandPaletteConfig,
+    pub formula_autocomplete: FormulaAutocompleteConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FormulaAutocompleteConfig {
+    pub enabled: bool,
+    pub show_description: bool,
+    pub show_signature: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +36,17 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             command_palette: CommandPaletteConfig::default(),
+            formula_autocomplete: FormulaAutocompleteConfig::default(),
+        }
+    }
+}
+
+impl Default for FormulaAutocompleteConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            show_description: true,
+            show_signature: true,
         }
     }
 }

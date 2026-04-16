@@ -6,17 +6,17 @@ use crate::eval::{evaluate, EvalContext};
 use crate::registry::{FnSpec, FunctionRegistry};
 
 pub fn register(reg: &mut FunctionRegistry) {
-    reg.register(FnSpec { name: "IF", min_args: 2, max_args: Some(3), eval: fn_if });
-    reg.register(FnSpec { name: "AND", min_args: 1, max_args: None, eval: fn_and });
-    reg.register(FnSpec { name: "OR", min_args: 1, max_args: None, eval: fn_or });
-    reg.register(FnSpec { name: "NOT", min_args: 1, max_args: Some(1), eval: fn_not });
-    reg.register(FnSpec { name: "XOR", min_args: 1, max_args: None, eval: fn_xor });
-    reg.register(FnSpec { name: "IFERROR", min_args: 2, max_args: Some(2), eval: fn_iferror });
-    reg.register(FnSpec { name: "IFNA", min_args: 2, max_args: Some(2), eval: fn_ifna });
-    reg.register(FnSpec { name: "IFS", min_args: 2, max_args: None, eval: fn_ifs });
-    reg.register(FnSpec { name: "SWITCH", min_args: 3, max_args: None, eval: fn_switch });
-    reg.register(FnSpec { name: "TRUE", min_args: 0, max_args: Some(0), eval: fn_true });
-    reg.register(FnSpec { name: "FALSE", min_args: 0, max_args: Some(0), eval: fn_false });
+    reg.register(FnSpec { name: "IF", description: "Returns value based on condition", syntax: "IF(logical_test, value_if_true, [value_if_false])", min_args: 2, max_args: Some(3), eval: fn_if });
+    reg.register(FnSpec { name: "AND", description: "TRUE if all arguments are true", syntax: "AND(logical1, [logical2], ...)", min_args: 1, max_args: None, eval: fn_and });
+    reg.register(FnSpec { name: "OR", description: "TRUE if any argument is true", syntax: "OR(logical1, [logical2], ...)", min_args: 1, max_args: None, eval: fn_or });
+    reg.register(FnSpec { name: "NOT", description: "Reverses a logical value", syntax: "NOT(logical)", min_args: 1, max_args: Some(1), eval: fn_not });
+    reg.register(FnSpec { name: "XOR", description: "TRUE if odd number of args are true", syntax: "XOR(logical1, [logical2], ...)", min_args: 1, max_args: None, eval: fn_xor });
+    reg.register(FnSpec { name: "IFERROR", description: "Returns value if no error, else alternate", syntax: "IFERROR(value, value_if_error)", min_args: 2, max_args: Some(2), eval: fn_iferror });
+    reg.register(FnSpec { name: "IFNA", description: "Returns value if not #N/A, else alternate", syntax: "IFNA(value, value_if_na)", min_args: 2, max_args: Some(2), eval: fn_ifna });
+    reg.register(FnSpec { name: "IFS", description: "Checks multiple conditions in order", syntax: "IFS(logical_test1, value1, [logical_test2, value2], ...)", min_args: 2, max_args: None, eval: fn_ifs });
+    reg.register(FnSpec { name: "SWITCH", description: "Matches value against list of cases", syntax: "SWITCH(expression, value1, result1, [default])", min_args: 3, max_args: None, eval: fn_switch });
+    reg.register(FnSpec { name: "TRUE", description: "Returns the logical value TRUE", syntax: "TRUE()", min_args: 0, max_args: Some(0), eval: fn_true });
+    reg.register(FnSpec { name: "FALSE", description: "Returns the logical value FALSE", syntax: "FALSE()", min_args: 0, max_args: Some(0), eval: fn_false });
 }
 
 fn to_bool(val: &CellValue) -> Option<bool> {

@@ -6,19 +6,19 @@ use crate::eval::{collect_range_values, evaluate, EvalContext};
 use crate::registry::{FnSpec, FunctionRegistry};
 
 pub fn register(reg: &mut FunctionRegistry) {
-    reg.register(FnSpec { name: "VLOOKUP", min_args: 3, max_args: Some(4), eval: fn_vlookup });
-    reg.register(FnSpec { name: "HLOOKUP", min_args: 3, max_args: Some(4), eval: fn_hlookup });
-    reg.register(FnSpec { name: "INDEX", min_args: 2, max_args: Some(3), eval: fn_index });
-    reg.register(FnSpec { name: "MATCH", min_args: 2, max_args: Some(3), eval: fn_match });
-    reg.register(FnSpec { name: "XLOOKUP", min_args: 3, max_args: Some(6), eval: fn_xlookup });
-    reg.register(FnSpec { name: "CHOOSE", min_args: 2, max_args: None, eval: fn_choose });
-    reg.register(FnSpec { name: "ROW", min_args: 0, max_args: Some(1), eval: fn_row });
-    reg.register(FnSpec { name: "COLUMN", min_args: 0, max_args: Some(1), eval: fn_column });
-    reg.register(FnSpec { name: "ROWS", min_args: 1, max_args: Some(1), eval: fn_rows });
-    reg.register(FnSpec { name: "COLUMNS", min_args: 1, max_args: Some(1), eval: fn_columns });
-    reg.register(FnSpec { name: "ADDRESS", min_args: 2, max_args: Some(5), eval: fn_address });
-    reg.register(FnSpec { name: "INDIRECT", min_args: 1, max_args: Some(2), eval: fn_indirect });
-    reg.register(FnSpec { name: "OFFSET", min_args: 3, max_args: Some(5), eval: fn_offset });
+    reg.register(FnSpec { name: "VLOOKUP", description: "Looks up value in first column of range", syntax: "VLOOKUP(lookup_value, table_array, col_index, [range_lookup])", min_args: 3, max_args: Some(4), eval: fn_vlookup });
+    reg.register(FnSpec { name: "HLOOKUP", description: "Looks up value in first row of range", syntax: "HLOOKUP(lookup_value, table_array, row_index, [range_lookup])", min_args: 3, max_args: Some(4), eval: fn_hlookup });
+    reg.register(FnSpec { name: "INDEX", description: "Returns value at row/col in range", syntax: "INDEX(array, row_num, [col_num])", min_args: 2, max_args: Some(3), eval: fn_index });
+    reg.register(FnSpec { name: "MATCH", description: "Returns position of value in range", syntax: "MATCH(lookup_value, lookup_array, [match_type])", min_args: 2, max_args: Some(3), eval: fn_match });
+    reg.register(FnSpec { name: "XLOOKUP", description: "Searches range and returns matching item", syntax: "XLOOKUP(lookup_value, lookup_array, return_array, [if_not_found], [match_mode], [search_mode])", min_args: 3, max_args: Some(6), eval: fn_xlookup });
+    reg.register(FnSpec { name: "CHOOSE", description: "Returns value from list by index", syntax: "CHOOSE(index_num, value1, [value2], ...)", min_args: 2, max_args: None, eval: fn_choose });
+    reg.register(FnSpec { name: "ROW", description: "Returns the row number", syntax: "ROW([reference])", min_args: 0, max_args: Some(1), eval: fn_row });
+    reg.register(FnSpec { name: "COLUMN", description: "Returns the column number", syntax: "COLUMN([reference])", min_args: 0, max_args: Some(1), eval: fn_column });
+    reg.register(FnSpec { name: "ROWS", description: "Returns number of rows in a range", syntax: "ROWS(array)", min_args: 1, max_args: Some(1), eval: fn_rows });
+    reg.register(FnSpec { name: "COLUMNS", description: "Returns number of columns in a range", syntax: "COLUMNS(array)", min_args: 1, max_args: Some(1), eval: fn_columns });
+    reg.register(FnSpec { name: "ADDRESS", description: "Creates a cell address as text", syntax: "ADDRESS(row_num, col_num, [abs_num], [a1], [sheet])", min_args: 2, max_args: Some(5), eval: fn_address });
+    reg.register(FnSpec { name: "INDIRECT", description: "Returns reference from text string", syntax: "INDIRECT(ref_text, [a1])", min_args: 1, max_args: Some(2), eval: fn_indirect });
+    reg.register(FnSpec { name: "OFFSET", description: "Returns a range offset from a reference", syntax: "OFFSET(reference, rows, cols, [height], [width])", min_args: 3, max_args: Some(5), eval: fn_offset });
 }
 
 fn range_dims(start: &Expr, end: &Expr) -> Option<(u32, u16, u32, u16)> {

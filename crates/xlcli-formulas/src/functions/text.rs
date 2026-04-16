@@ -6,30 +6,30 @@ use crate::eval::{evaluate, EvalContext};
 use crate::registry::{FnSpec, FunctionRegistry};
 
 pub fn register(reg: &mut FunctionRegistry) {
-    reg.register(FnSpec { name: "LEN", min_args: 1, max_args: Some(1), eval: fn_len });
-    reg.register(FnSpec { name: "LEFT", min_args: 1, max_args: Some(2), eval: fn_left });
-    reg.register(FnSpec { name: "RIGHT", min_args: 1, max_args: Some(2), eval: fn_right });
-    reg.register(FnSpec { name: "MID", min_args: 3, max_args: Some(3), eval: fn_mid });
-    reg.register(FnSpec { name: "UPPER", min_args: 1, max_args: Some(1), eval: fn_upper });
-    reg.register(FnSpec { name: "LOWER", min_args: 1, max_args: Some(1), eval: fn_lower });
-    reg.register(FnSpec { name: "PROPER", min_args: 1, max_args: Some(1), eval: fn_proper });
-    reg.register(FnSpec { name: "TRIM", min_args: 1, max_args: Some(1), eval: fn_trim });
-    reg.register(FnSpec { name: "CLEAN", min_args: 1, max_args: Some(1), eval: fn_clean });
-    reg.register(FnSpec { name: "CONCATENATE", min_args: 1, max_args: None, eval: fn_concatenate });
-    reg.register(FnSpec { name: "CONCAT", min_args: 1, max_args: None, eval: fn_concatenate });
-    reg.register(FnSpec { name: "TEXTJOIN", min_args: 3, max_args: None, eval: fn_textjoin });
-    reg.register(FnSpec { name: "REPT", min_args: 2, max_args: Some(2), eval: fn_rept });
-    reg.register(FnSpec { name: "SUBSTITUTE", min_args: 3, max_args: Some(4), eval: fn_substitute });
-    reg.register(FnSpec { name: "REPLACE", min_args: 4, max_args: Some(4), eval: fn_replace });
-    reg.register(FnSpec { name: "FIND", min_args: 2, max_args: Some(3), eval: fn_find });
-    reg.register(FnSpec { name: "SEARCH", min_args: 2, max_args: Some(3), eval: fn_search });
-    reg.register(FnSpec { name: "TEXT", min_args: 2, max_args: Some(2), eval: fn_text });
-    reg.register(FnSpec { name: "VALUE", min_args: 1, max_args: Some(1), eval: fn_value });
-    reg.register(FnSpec { name: "EXACT", min_args: 2, max_args: Some(2), eval: fn_exact });
-    reg.register(FnSpec { name: "T", min_args: 1, max_args: Some(1), eval: fn_t });
-    reg.register(FnSpec { name: "CHAR", min_args: 1, max_args: Some(1), eval: fn_char });
-    reg.register(FnSpec { name: "CODE", min_args: 1, max_args: Some(1), eval: fn_code });
-    reg.register(FnSpec { name: "NUMBERVALUE", min_args: 1, max_args: Some(3), eval: fn_numbervalue });
+    reg.register(FnSpec { name: "LEN", description: "Returns the number of characters", syntax: "LEN(text)", min_args: 1, max_args: Some(1), eval: fn_len });
+    reg.register(FnSpec { name: "LEFT", description: "Returns leftmost characters", syntax: "LEFT(text, [num_chars])", min_args: 1, max_args: Some(2), eval: fn_left });
+    reg.register(FnSpec { name: "RIGHT", description: "Returns rightmost characters", syntax: "RIGHT(text, [num_chars])", min_args: 1, max_args: Some(2), eval: fn_right });
+    reg.register(FnSpec { name: "MID", description: "Returns characters from the middle", syntax: "MID(text, start_num, num_chars)", min_args: 3, max_args: Some(3), eval: fn_mid });
+    reg.register(FnSpec { name: "UPPER", description: "Converts text to uppercase", syntax: "UPPER(text)", min_args: 1, max_args: Some(1), eval: fn_upper });
+    reg.register(FnSpec { name: "LOWER", description: "Converts text to lowercase", syntax: "LOWER(text)", min_args: 1, max_args: Some(1), eval: fn_lower });
+    reg.register(FnSpec { name: "PROPER", description: "Capitalizes each word", syntax: "PROPER(text)", min_args: 1, max_args: Some(1), eval: fn_proper });
+    reg.register(FnSpec { name: "TRIM", description: "Removes extra spaces", syntax: "TRIM(text)", min_args: 1, max_args: Some(1), eval: fn_trim });
+    reg.register(FnSpec { name: "CLEAN", description: "Removes non-printable characters", syntax: "CLEAN(text)", min_args: 1, max_args: Some(1), eval: fn_clean });
+    reg.register(FnSpec { name: "CONCATENATE", description: "Joins text strings together", syntax: "CONCATENATE(text1, [text2], ...)", min_args: 1, max_args: None, eval: fn_concatenate });
+    reg.register(FnSpec { name: "CONCAT", description: "Joins text strings together", syntax: "CONCAT(text1, [text2], ...)", min_args: 1, max_args: None, eval: fn_concatenate });
+    reg.register(FnSpec { name: "TEXTJOIN", description: "Joins text with a delimiter", syntax: "TEXTJOIN(delimiter, ignore_empty, text1, ...)", min_args: 3, max_args: None, eval: fn_textjoin });
+    reg.register(FnSpec { name: "REPT", description: "Repeats text a given number of times", syntax: "REPT(text, number_times)", min_args: 2, max_args: Some(2), eval: fn_rept });
+    reg.register(FnSpec { name: "SUBSTITUTE", description: "Replaces occurrences of text", syntax: "SUBSTITUTE(text, old_text, new_text, [instance])", min_args: 3, max_args: Some(4), eval: fn_substitute });
+    reg.register(FnSpec { name: "REPLACE", description: "Replaces characters by position", syntax: "REPLACE(old_text, start_num, num_chars, new_text)", min_args: 4, max_args: Some(4), eval: fn_replace });
+    reg.register(FnSpec { name: "FIND", description: "Finds text within text (case-sensitive)", syntax: "FIND(find_text, within_text, [start_num])", min_args: 2, max_args: Some(3), eval: fn_find });
+    reg.register(FnSpec { name: "SEARCH", description: "Finds text within text (case-insensitive)", syntax: "SEARCH(find_text, within_text, [start_num])", min_args: 2, max_args: Some(3), eval: fn_search });
+    reg.register(FnSpec { name: "TEXT", description: "Formats a number as text", syntax: "TEXT(value, format_text)", min_args: 2, max_args: Some(2), eval: fn_text });
+    reg.register(FnSpec { name: "VALUE", description: "Converts text to a number", syntax: "VALUE(text)", min_args: 1, max_args: Some(1), eval: fn_value });
+    reg.register(FnSpec { name: "EXACT", description: "Checks if two strings are identical", syntax: "EXACT(text1, text2)", min_args: 2, max_args: Some(2), eval: fn_exact });
+    reg.register(FnSpec { name: "T", description: "Returns text or empty string", syntax: "T(value)", min_args: 1, max_args: Some(1), eval: fn_t });
+    reg.register(FnSpec { name: "CHAR", description: "Returns character from code number", syntax: "CHAR(number)", min_args: 1, max_args: Some(1), eval: fn_char });
+    reg.register(FnSpec { name: "CODE", description: "Returns numeric code for a character", syntax: "CODE(text)", min_args: 1, max_args: Some(1), eval: fn_code });
+    reg.register(FnSpec { name: "NUMBERVALUE", description: "Converts text to number with locale", syntax: "NUMBERVALUE(text, [decimal_sep], [group_sep])", min_args: 1, max_args: Some(3), eval: fn_numbervalue });
 }
 
 fn eval_to_string(expr: &Expr, ctx: &dyn EvalContext, reg: &FunctionRegistry) -> String {

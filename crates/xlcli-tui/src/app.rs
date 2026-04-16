@@ -28,6 +28,14 @@ pub struct App {
     pub modified: bool,
     pub config: Config,
     pub formula_registry: FunctionRegistry,
+    pub autocomplete: AutocompleteState,
+}
+
+pub struct AutocompleteState {
+    pub visible: bool,
+    pub matches: Vec<&'static str>,
+    pub selected: usize,
+    pub active_function: Option<String>,
 }
 
 impl App {
@@ -48,6 +56,7 @@ impl App {
             modified: false,
             config,
             formula_registry: FunctionRegistry::default(),
+            autocomplete: AutocompleteState { visible: false, matches: Vec::new(), selected: 0, active_function: None },
         };
         app.recalc_all();
         app
@@ -116,6 +125,104 @@ impl App {
     pub fn enter_insert_with(&mut self, prefix: &str) {
         self.edit_buffer = prefix.to_string();
         self.mode = Mode::Insert;
+        self.update_autocomplete();
+    }
+
+    pub fn update_autocomplete(&mut self) {
+        self.autocomplete.active_function = None;
+
+        if !self.edit_buffer.starts_with('=') || self.edit_buffer.len() < 2 {
+            self.autocomplete.visible = false;
+            self.autocomplete.matches.clear();
+            self.autocomplete.selected = 0;
+            return;
+        }
+
+        let after_eq = &self.edit_buffer[1..];
+
+        if self.config.formula_autocomplete.show_signature {
+            self.autocomplete.active_function = self.find_active_function(after_eq);
+        }
+
+        if !self.config.formula_autocomplete.enabled {
+            self.autocomplete.visible = false;
+            self.autocomplete.matches.clear();
+            self.autocomplete.selected = 0;
+            return;
+        }
+
+        let func_start = after_eq.rfind(|c: char| "+-*/^&=<>,(;".contains(c))
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let partial = &after_eq[func_start..];
+
+        if partial.is_empty() || partial.contains('(') || partial.chars().any(|c| c.is_ascii_digit() && func_start == 0 && partial.starts_with(c)) {
+            self.autocomplete.visible = false;
+            self.autocomplete.matches.clear();
+            self.autocomplete.selected = 0;
+            return;
+        }
+
+        let upper = partial.to_uppercase();
+        let names = self.formula_registry.names();
+        let matches: Vec<&'static str> = names.into_iter()
+            .filter(|n| n.starts_with(&upper))
+            .collect();
+
+        if matches.is_empty() || (matches.len() == 1 && matches[0] == upper) {
+            self.autocomplete.visible = false;
+            self.autocomplete.matches.clear();
+            self.autocomplete.selected = 0;
+        } else {
+            self.autocomplete.visible = true;
+            self.autocomplete.matches = matches;
+            if self.autocomplete.selected >= self.autocomplete.matches.len() {
+                self.autocomplete.selected = 0;
+            }
+        }
+    }
+
+    fn find_active_function(&self, expr: &str) -> Option<String> {
+        let mut depth = 0i32;
+        for (i, c) in expr.char_indices().rev() {
+            match c {
+                ')' => depth += 1,
+                '(' => {
+                    if depth > 0 {
+                        depth -= 1;
+                    } else {
+                        let before = &expr[..i];
+                        let name_start = before.rfind(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '_')
+                            .map(|p| p + 1)
+                            .unwrap_or(0);
+                        let name = before[name_start..].to_uppercase();
+                        if !name.is_empty() && self.formula_registry.get(&name).is_some() {
+                            return Some(name);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    pub fn accept_autocomplete(&mut self) {
+        if !self.autocomplete.visible || self.autocomplete.matches.is_empty() {
+            return;
+        }
+        let chosen = self.autocomplete.matches[self.autocomplete.selected];
+        let after_eq = &self.edit_buffer[1..];
+        let func_start = after_eq.rfind(|c: char| "+-*/^&=<>,(;".contains(c))
+            .map(|i| i + 1)
+            .unwrap_or(0);
+
+        let prefix = format!("={}", &after_eq[..func_start]);
+        self.edit_buffer = format!("{}{}(", prefix, chosen);
+        self.autocomplete.visible = false;
+        self.autocomplete.matches.clear();
+        self.autocomplete.selected = 0;
+        self.update_autocomplete();
     }
 
     pub fn confirm_edit(&mut self) {

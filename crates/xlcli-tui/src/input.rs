@@ -171,8 +171,38 @@ fn handle_command(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_insert(app: &mut App, key: KeyEvent) {
+    if app.autocomplete.visible {
+        match key.code {
+            KeyCode::Tab | KeyCode::Enter => {
+                app.accept_autocomplete();
+                return;
+            }
+            KeyCode::Down => {
+                let len = app.autocomplete.matches.len();
+                if len > 0 {
+                    app.autocomplete.selected = (app.autocomplete.selected + 1) % len;
+                }
+                return;
+            }
+            KeyCode::Up => {
+                let len = app.autocomplete.matches.len();
+                if len > 0 {
+                    app.autocomplete.selected = (app.autocomplete.selected + len - 1) % len;
+                }
+                return;
+            }
+            KeyCode::Esc => {
+                app.autocomplete.visible = false;
+                app.autocomplete.matches.clear();
+                return;
+            }
+            _ => {}
+        }
+    }
+
     match key.code {
         KeyCode::Esc => {
+            app.autocomplete.visible = false;
             app.confirm_edit();
         }
         KeyCode::Enter => {
@@ -186,14 +216,12 @@ fn handle_insert(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Backspace => {
             app.edit_buffer.pop();
+            app.update_autocomplete();
         }
         KeyCode::Char(c) => {
             app.edit_buffer.push(c);
+            app.update_autocomplete();
         }
-        KeyCode::Left => {
-            // cursor within edit buffer — not implemented yet, just ignore
-        }
-        KeyCode::Right => {}
         _ => {}
     }
 }

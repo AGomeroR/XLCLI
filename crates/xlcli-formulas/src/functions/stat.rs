@@ -6,25 +6,25 @@ use crate::eval::{collect_range_values, evaluate, EvalContext};
 use crate::registry::{FnSpec, FunctionRegistry};
 
 pub fn register(reg: &mut FunctionRegistry) {
-    reg.register(FnSpec { name: "COUNT", min_args: 1, max_args: None, eval: fn_count });
-    reg.register(FnSpec { name: "COUNTA", min_args: 1, max_args: None, eval: fn_counta });
-    reg.register(FnSpec { name: "COUNTBLANK", min_args: 1, max_args: Some(1), eval: fn_countblank });
-    reg.register(FnSpec { name: "COUNTIF", min_args: 2, max_args: Some(2), eval: fn_countif });
-    reg.register(FnSpec { name: "SUMIF", min_args: 2, max_args: Some(3), eval: fn_sumif });
-    reg.register(FnSpec { name: "AVERAGEIF", min_args: 2, max_args: Some(3), eval: fn_averageif });
-    reg.register(FnSpec { name: "MEDIAN", min_args: 1, max_args: None, eval: fn_median });
-    reg.register(FnSpec { name: "MODE", min_args: 1, max_args: None, eval: fn_mode });
-    reg.register(FnSpec { name: "STDEV", min_args: 1, max_args: None, eval: fn_stdev });
-    reg.register(FnSpec { name: "STDEVP", min_args: 1, max_args: None, eval: fn_stdevp });
-    reg.register(FnSpec { name: "VAR", min_args: 1, max_args: None, eval: fn_var });
-    reg.register(FnSpec { name: "VARP", min_args: 1, max_args: None, eval: fn_varp });
-    reg.register(FnSpec { name: "LARGE", min_args: 2, max_args: Some(2), eval: fn_large });
-    reg.register(FnSpec { name: "SMALL", min_args: 2, max_args: Some(2), eval: fn_small });
-    reg.register(FnSpec { name: "RANK", min_args: 2, max_args: Some(3), eval: fn_rank });
-    reg.register(FnSpec { name: "PERCENTILE", min_args: 2, max_args: Some(2), eval: fn_percentile });
-    reg.register(FnSpec { name: "CORREL", min_args: 2, max_args: Some(2), eval: fn_correl });
-    reg.register(FnSpec { name: "MINIFS", min_args: 3, max_args: None, eval: fn_minifs });
-    reg.register(FnSpec { name: "MAXIFS", min_args: 3, max_args: None, eval: fn_maxifs });
+    reg.register(FnSpec { name: "COUNT", description: "Counts cells containing numbers", syntax: "COUNT(value1, [value2], ...)", min_args: 1, max_args: None, eval: fn_count });
+    reg.register(FnSpec { name: "COUNTA", description: "Counts non-empty cells", syntax: "COUNTA(value1, [value2], ...)", min_args: 1, max_args: None, eval: fn_counta });
+    reg.register(FnSpec { name: "COUNTBLANK", description: "Counts empty cells", syntax: "COUNTBLANK(range)", min_args: 1, max_args: Some(1), eval: fn_countblank });
+    reg.register(FnSpec { name: "COUNTIF", description: "Counts cells matching a condition", syntax: "COUNTIF(range, criteria)", min_args: 2, max_args: Some(2), eval: fn_countif });
+    reg.register(FnSpec { name: "SUMIF", description: "Sums cells matching a condition", syntax: "SUMIF(range, criteria, [sum_range])", min_args: 2, max_args: Some(3), eval: fn_sumif });
+    reg.register(FnSpec { name: "AVERAGEIF", description: "Averages cells matching a condition", syntax: "AVERAGEIF(range, criteria, [average_range])", min_args: 2, max_args: Some(3), eval: fn_averageif });
+    reg.register(FnSpec { name: "MEDIAN", description: "Returns the median value", syntax: "MEDIAN(number1, [number2], ...)", min_args: 1, max_args: None, eval: fn_median });
+    reg.register(FnSpec { name: "MODE", description: "Returns the most frequent value", syntax: "MODE(number1, [number2], ...)", min_args: 1, max_args: None, eval: fn_mode });
+    reg.register(FnSpec { name: "STDEV", description: "Returns sample standard deviation", syntax: "STDEV(number1, [number2], ...)", min_args: 1, max_args: None, eval: fn_stdev });
+    reg.register(FnSpec { name: "STDEVP", description: "Returns population standard deviation", syntax: "STDEVP(number1, [number2], ...)", min_args: 1, max_args: None, eval: fn_stdevp });
+    reg.register(FnSpec { name: "VAR", description: "Returns sample variance", syntax: "VAR(number1, [number2], ...)", min_args: 1, max_args: None, eval: fn_var });
+    reg.register(FnSpec { name: "VARP", description: "Returns population variance", syntax: "VARP(number1, [number2], ...)", min_args: 1, max_args: None, eval: fn_varp });
+    reg.register(FnSpec { name: "LARGE", description: "Returns the k-th largest value", syntax: "LARGE(array, k)", min_args: 2, max_args: Some(2), eval: fn_large });
+    reg.register(FnSpec { name: "SMALL", description: "Returns the k-th smallest value", syntax: "SMALL(array, k)", min_args: 2, max_args: Some(2), eval: fn_small });
+    reg.register(FnSpec { name: "RANK", description: "Returns the rank of a number", syntax: "RANK(number, ref, [order])", min_args: 2, max_args: Some(3), eval: fn_rank });
+    reg.register(FnSpec { name: "PERCENTILE", description: "Returns the k-th percentile", syntax: "PERCENTILE(array, k)", min_args: 2, max_args: Some(2), eval: fn_percentile });
+    reg.register(FnSpec { name: "CORREL", description: "Returns correlation coefficient", syntax: "CORREL(array1, array2)", min_args: 2, max_args: Some(2), eval: fn_correl });
+    reg.register(FnSpec { name: "MINIFS", description: "Returns minimum with conditions", syntax: "MINIFS(min_range, criteria_range1, criteria1, ...)", min_args: 3, max_args: None, eval: fn_minifs });
+    reg.register(FnSpec { name: "MAXIFS", description: "Returns maximum with conditions", syntax: "MAXIFS(max_range, criteria_range1, criteria1, ...)", min_args: 3, max_args: None, eval: fn_maxifs });
 }
 
 fn collect_numbers(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> Vec<f64> {

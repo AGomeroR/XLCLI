@@ -5,6 +5,8 @@ pub mod lookup;
 pub mod stat;
 pub mod info;
 pub mod date;
+pub mod financial;
+pub mod engineering;
 
 use crate::registry::FunctionRegistry;
 
@@ -16,4 +18,6 @@ pub fn register_all(reg: &mut FunctionRegistry) {
     stat::register(reg);
     info::register(reg);
     date::register(reg);
+    financial::register(reg);
+    engineering::register(reg);
 }

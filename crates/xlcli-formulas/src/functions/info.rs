@@ -6,21 +6,21 @@ use crate::eval::{evaluate, EvalContext};
 use crate::registry::{FnSpec, FunctionRegistry};
 
 pub fn register(reg: &mut FunctionRegistry) {
-    reg.register(FnSpec { name: "ISBLANK", min_args: 1, max_args: Some(1), eval: fn_isblank });
-    reg.register(FnSpec { name: "ISERROR", min_args: 1, max_args: Some(1), eval: fn_iserror });
-    reg.register(FnSpec { name: "ISERR", min_args: 1, max_args: Some(1), eval: fn_iserr });
-    reg.register(FnSpec { name: "ISNA", min_args: 1, max_args: Some(1), eval: fn_isna });
-    reg.register(FnSpec { name: "ISNUMBER", min_args: 1, max_args: Some(1), eval: fn_isnumber });
-    reg.register(FnSpec { name: "ISTEXT", min_args: 1, max_args: Some(1), eval: fn_istext });
-    reg.register(FnSpec { name: "ISLOGICAL", min_args: 1, max_args: Some(1), eval: fn_islogical });
-    reg.register(FnSpec { name: "ISNONTEXT", min_args: 1, max_args: Some(1), eval: fn_isnontext });
-    reg.register(FnSpec { name: "ISEVEN", min_args: 1, max_args: Some(1), eval: fn_iseven });
-    reg.register(FnSpec { name: "ISODD", min_args: 1, max_args: Some(1), eval: fn_isodd });
-    reg.register(FnSpec { name: "TYPE", min_args: 1, max_args: Some(1), eval: fn_type });
-    reg.register(FnSpec { name: "N", min_args: 1, max_args: Some(1), eval: fn_n });
-    reg.register(FnSpec { name: "NA", min_args: 0, max_args: Some(0), eval: fn_na });
-    reg.register(FnSpec { name: "ERROR.TYPE", min_args: 1, max_args: Some(1), eval: fn_error_type });
-    reg.register(FnSpec { name: "SHEET", min_args: 0, max_args: Some(1), eval: fn_sheet });
+    reg.register(FnSpec { name: "ISBLANK", description: "TRUE if cell is empty", syntax: "ISBLANK(value)", min_args: 1, max_args: Some(1), eval: fn_isblank });
+    reg.register(FnSpec { name: "ISERROR", description: "TRUE if value is any error", syntax: "ISERROR(value)", min_args: 1, max_args: Some(1), eval: fn_iserror });
+    reg.register(FnSpec { name: "ISERR", description: "TRUE if value is error except #N/A", syntax: "ISERR(value)", min_args: 1, max_args: Some(1), eval: fn_iserr });
+    reg.register(FnSpec { name: "ISNA", description: "TRUE if value is #N/A", syntax: "ISNA(value)", min_args: 1, max_args: Some(1), eval: fn_isna });
+    reg.register(FnSpec { name: "ISNUMBER", description: "TRUE if value is a number", syntax: "ISNUMBER(value)", min_args: 1, max_args: Some(1), eval: fn_isnumber });
+    reg.register(FnSpec { name: "ISTEXT", description: "TRUE if value is text", syntax: "ISTEXT(value)", min_args: 1, max_args: Some(1), eval: fn_istext });
+    reg.register(FnSpec { name: "ISLOGICAL", description: "TRUE if value is boolean", syntax: "ISLOGICAL(value)", min_args: 1, max_args: Some(1), eval: fn_islogical });
+    reg.register(FnSpec { name: "ISNONTEXT", description: "TRUE if value is not text", syntax: "ISNONTEXT(value)", min_args: 1, max_args: Some(1), eval: fn_isnontext });
+    reg.register(FnSpec { name: "ISEVEN", description: "TRUE if number is even", syntax: "ISEVEN(number)", min_args: 1, max_args: Some(1), eval: fn_iseven });
+    reg.register(FnSpec { name: "ISODD", description: "TRUE if number is odd", syntax: "ISODD(number)", min_args: 1, max_args: Some(1), eval: fn_isodd });
+    reg.register(FnSpec { name: "TYPE", description: "Returns type of value as number", syntax: "TYPE(value)", min_args: 1, max_args: Some(1), eval: fn_type });
+    reg.register(FnSpec { name: "N", description: "Converts value to a number", syntax: "N(value)", min_args: 1, max_args: Some(1), eval: fn_n });
+    reg.register(FnSpec { name: "NA", description: "Returns the #N/A error value", syntax: "NA()", min_args: 0, max_args: Some(0), eval: fn_na });
+    reg.register(FnSpec { name: "ERROR.TYPE", description: "Returns number for error type", syntax: "ERROR.TYPE(error_val)", min_args: 1, max_args: Some(1), eval: fn_error_type });
+    reg.register(FnSpec { name: "SHEET", description: "Returns the sheet number", syntax: "SHEET([value])", min_args: 0, max_args: Some(1), eval: fn_sheet });
 }
 
 fn fn_isblank(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> CellValue {

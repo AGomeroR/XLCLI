@@ -8,24 +8,24 @@ use crate::eval::{evaluate, EvalContext};
 use crate::registry::{FnSpec, FunctionRegistry};
 
 pub fn register(reg: &mut FunctionRegistry) {
-    reg.register(FnSpec { name: "NOW", min_args: 0, max_args: Some(0), eval: fn_now });
-    reg.register(FnSpec { name: "TODAY", min_args: 0, max_args: Some(0), eval: fn_today });
-    reg.register(FnSpec { name: "DATE", min_args: 3, max_args: Some(3), eval: fn_date });
-    reg.register(FnSpec { name: "TIME", min_args: 3, max_args: Some(3), eval: fn_time });
-    reg.register(FnSpec { name: "YEAR", min_args: 1, max_args: Some(1), eval: fn_year });
-    reg.register(FnSpec { name: "MONTH", min_args: 1, max_args: Some(1), eval: fn_month });
-    reg.register(FnSpec { name: "DAY", min_args: 1, max_args: Some(1), eval: fn_day });
-    reg.register(FnSpec { name: "HOUR", min_args: 1, max_args: Some(1), eval: fn_hour });
-    reg.register(FnSpec { name: "MINUTE", min_args: 1, max_args: Some(1), eval: fn_minute });
-    reg.register(FnSpec { name: "SECOND", min_args: 1, max_args: Some(1), eval: fn_second });
-    reg.register(FnSpec { name: "WEEKDAY", min_args: 1, max_args: Some(2), eval: fn_weekday });
-    reg.register(FnSpec { name: "WEEKNUM", min_args: 1, max_args: Some(2), eval: fn_weeknum });
-    reg.register(FnSpec { name: "DATEVALUE", min_args: 1, max_args: Some(1), eval: fn_datevalue });
-    reg.register(FnSpec { name: "DAYS", min_args: 2, max_args: Some(2), eval: fn_days });
-    reg.register(FnSpec { name: "EDATE", min_args: 2, max_args: Some(2), eval: fn_edate });
-    reg.register(FnSpec { name: "EOMONTH", min_args: 2, max_args: Some(2), eval: fn_eomonth });
-    reg.register(FnSpec { name: "DATEDIF", min_args: 3, max_args: Some(3), eval: fn_datedif });
-    reg.register(FnSpec { name: "ISOWEEKNUM", min_args: 1, max_args: Some(1), eval: fn_isoweeknum });
+    reg.register(FnSpec { name: "NOW", description: "Returns current date and time", syntax: "NOW()", min_args: 0, max_args: Some(0), eval: fn_now });
+    reg.register(FnSpec { name: "TODAY", description: "Returns current date", syntax: "TODAY()", min_args: 0, max_args: Some(0), eval: fn_today });
+    reg.register(FnSpec { name: "DATE", description: "Creates a date from year, month, day", syntax: "DATE(year, month, day)", min_args: 3, max_args: Some(3), eval: fn_date });
+    reg.register(FnSpec { name: "TIME", description: "Creates a time from hours, minutes, seconds", syntax: "TIME(hour, minute, second)", min_args: 3, max_args: Some(3), eval: fn_time });
+    reg.register(FnSpec { name: "YEAR", description: "Returns the year from a date", syntax: "YEAR(serial_number)", min_args: 1, max_args: Some(1), eval: fn_year });
+    reg.register(FnSpec { name: "MONTH", description: "Returns the month from a date", syntax: "MONTH(serial_number)", min_args: 1, max_args: Some(1), eval: fn_month });
+    reg.register(FnSpec { name: "DAY", description: "Returns the day from a date", syntax: "DAY(serial_number)", min_args: 1, max_args: Some(1), eval: fn_day });
+    reg.register(FnSpec { name: "HOUR", description: "Returns the hour from a time", syntax: "HOUR(serial_number)", min_args: 1, max_args: Some(1), eval: fn_hour });
+    reg.register(FnSpec { name: "MINUTE", description: "Returns the minute from a time", syntax: "MINUTE(serial_number)", min_args: 1, max_args: Some(1), eval: fn_minute });
+    reg.register(FnSpec { name: "SECOND", description: "Returns the second from a time", syntax: "SECOND(serial_number)", min_args: 1, max_args: Some(1), eval: fn_second });
+    reg.register(FnSpec { name: "WEEKDAY", description: "Returns the day of the week", syntax: "WEEKDAY(serial_number, [return_type])", min_args: 1, max_args: Some(2), eval: fn_weekday });
+    reg.register(FnSpec { name: "WEEKNUM", description: "Returns the week number of the year", syntax: "WEEKNUM(serial_number, [return_type])", min_args: 1, max_args: Some(2), eval: fn_weeknum });
+    reg.register(FnSpec { name: "DATEVALUE", description: "Converts date text to a serial number", syntax: "DATEVALUE(date_text)", min_args: 1, max_args: Some(1), eval: fn_datevalue });
+    reg.register(FnSpec { name: "DAYS", description: "Returns days between two dates", syntax: "DAYS(end_date, start_date)", min_args: 2, max_args: Some(2), eval: fn_days });
+    reg.register(FnSpec { name: "EDATE", description: "Returns date shifted by months", syntax: "EDATE(start_date, months)", min_args: 2, max_args: Some(2), eval: fn_edate });
+    reg.register(FnSpec { name: "EOMONTH", description: "Returns last day of month offset", syntax: "EOMONTH(start_date, months)", min_args: 2, max_args: Some(2), eval: fn_eomonth });
+    reg.register(FnSpec { name: "DATEDIF", description: "Returns difference between two dates", syntax: "DATEDIF(start_date, end_date, unit)", min_args: 3, max_args: Some(3), eval: fn_datedif });
+    reg.register(FnSpec { name: "ISOWEEKNUM", description: "Returns ISO week number", syntax: "ISOWEEKNUM(date)", min_args: 1, max_args: Some(1), eval: fn_isoweeknum });
 }
 
 const EXCEL_EPOCH: i64 = 25569; // days between 1899-12-30 and 1970-01-01

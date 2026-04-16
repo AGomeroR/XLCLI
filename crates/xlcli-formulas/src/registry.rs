@@ -7,6 +7,8 @@ use crate::eval::EvalContext;
 
 pub struct FnSpec {
     pub name: &'static str,
+    pub description: &'static str,
+    pub syntax: &'static str,
     pub min_args: usize,
     pub max_args: Option<usize>,
     pub eval: fn(&[Expr], &dyn EvalContext, &FunctionRegistry) -> CellValue,
@@ -33,6 +35,20 @@ impl FunctionRegistry {
 
     pub fn count(&self) -> usize {
         self.funcs.len()
+    }
+
+    pub fn names(&self) -> Vec<&'static str> {
+        let mut names: Vec<&'static str> = self.funcs.keys().copied().collect();
+        names.sort_unstable();
+        names
+    }
+
+    pub fn description(&self, name: &str) -> &'static str {
+        self.funcs.get(name).map(|s| s.description).unwrap_or("")
+    }
+
+    pub fn syntax(&self, name: &str) -> &'static str {
+        self.funcs.get(name).map(|s| s.syntax).unwrap_or("")
     }
 }
 

@@ -152,7 +152,7 @@ Press `:` to open the command palette (or inline status bar, depending on config
 
 ---
 
-## Supported Formulas (140 total)
+## Supported Formulas (195 total)
 
 All formulas use `=` prefix. Ranges use colon syntax: `A1:B10`.
 Arguments separated by `,` or `;`.
@@ -223,6 +223,44 @@ MONTH       DAY         HOUR        MINUTE      SECOND
 WEEKDAY     WEEKNUM     DATEVALUE   DAYS        EDATE
 EOMONTH     DATEDIF     ISOWEEKNUM
 ```
+
+### Financial (28)
+
+```
+PMT         FV          PV          NPV         IRR
+RATE        NPER        IPMT        PPMT        CUMIPMT
+CUMPRINC    SLN         SYD         DB          DDB
+EFFECT      NOMINAL     DOLLARDE    DOLLARFR    PDURATION
+RRI         DISC        TBILLEQ     TBILLPRICE  TBILLYIELD
+XNPV        MIRR        ISPMT
+```
+
+### Engineering (27)
+
+```
+DEC2BIN     DEC2OCT     DEC2HEX     BIN2DEC     BIN2OCT
+BIN2HEX     OCT2DEC     OCT2BIN     OCT2HEX     HEX2DEC
+HEX2BIN     HEX2OCT     BITAND      BITOR       BITXOR
+BITLSHIFT   BITRSHIFT   COMPLEX     IMAGINARY   IMREAL
+IMABS       IMSUM       DELTA       GESTEP      ERF
+ERFC        CONVERT
+```
+
+---
+
+## Formula Autocomplete
+
+When typing a formula (after `=`), an autocomplete popup appears:
+
+| Key         | Action                           |
+|-------------|----------------------------------|
+| Type chars  | Filter matching formulas         |
+| `Down`      | Select next match                |
+| `Up`        | Select previous match            |
+| `Tab`/`Enter`| Accept selected formula + `(`  |
+| `Esc`       | Dismiss autocomplete             |
+
+Example: typing `=SU` shows `SUM`, `SUBSTITUTE`, `SUMIF`, `SUMPRODUCT`...
 
 ---
 
