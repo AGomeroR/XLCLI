@@ -162,15 +162,16 @@ fn collect_numbers(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry)
         match arg {
             Expr::Range { start, end } => {
                 for val in collect_range_values(start, end, ctx) {
-                    if let Some(n) = val.as_f64() {
-                        nums.push(n);
-                    }
+                    if let Some(n) = val.as_f64() { nums.push(n); }
+                }
+            }
+            Expr::NamedRef(name) => {
+                for val in crate::eval::collect_named_range_values(name, ctx) {
+                    if let Some(n) = val.as_f64() { nums.push(n); }
                 }
             }
             _ => {
-                if let Some(n) = evaluate(arg, ctx, reg).as_f64() {
-                    nums.push(n);
-                }
+                if let Some(n) = evaluate(arg, ctx, reg).as_f64() { nums.push(n); }
             }
         }
     }
@@ -181,12 +182,9 @@ fn collect_all_values(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegist
     let mut vals = Vec::new();
     for arg in args {
         match arg {
-            Expr::Range { start, end } => {
-                vals.extend(collect_range_values(start, end, ctx));
-            }
-            _ => {
-                vals.push(evaluate(arg, ctx, reg));
-            }
+            Expr::Range { start, end } => vals.extend(collect_range_values(start, end, ctx)),
+            Expr::NamedRef(name) => vals.extend(crate::eval::collect_named_range_values(name, ctx)),
+            _ => vals.push(evaluate(arg, ctx, reg)),
         }
     }
     vals
@@ -205,10 +203,7 @@ fn fn_counta(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry) -> Ce
 }
 
 fn fn_countblank(args: &[Expr], ctx: &dyn EvalContext, _reg: &FunctionRegistry) -> CellValue {
-    let vals = match &args[0] {
-        Expr::Range { start, end } => collect_range_values(start, end, ctx),
-        _ => return CellValue::Error(CellError::Value),
-    };
+    let vals = crate::eval::eval_as_range(&args[0], ctx);
     let count = vals.iter().filter(|v| matches!(v, CellValue::Empty)).count();
     CellValue::Number(count as f64)
 }

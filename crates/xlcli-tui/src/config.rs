@@ -6,6 +6,13 @@ use std::path::PathBuf;
 pub struct Config {
     pub command_palette: CommandPaletteConfig,
     pub formula_autocomplete: FormulaAutocompleteConfig,
+    pub sort: SortConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SortConfig {
+    pub allow_full_sheet: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,11 +39,20 @@ pub enum PalettePosition {
     Bottom,
 }
 
+impl Default for SortConfig {
+    fn default() -> Self {
+        Self {
+            allow_full_sheet: true,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             command_palette: CommandPaletteConfig::default(),
             formula_autocomplete: FormulaAutocompleteConfig::default(),
+            sort: SortConfig::default(),
         }
     }
 }

@@ -20,17 +20,43 @@ impl Viewport {
     }
 
     pub fn update_for_cursor(&mut self, cursor: &CellAddr) {
-        if cursor.row < self.top_row {
-            self.top_row = cursor.row;
+        self.update_for_cursor_with_freeze(cursor, 0, 0);
+    }
+
+    pub fn update_for_cursor_with_freeze(&mut self, cursor: &CellAddr, freeze_rows: u32, freeze_cols: u16) {
+        // Always ensure scrollable area starts past frozen region
+        if self.top_row < freeze_rows {
+            self.top_row = freeze_rows;
         }
-        if cursor.row >= self.top_row + self.visible_rows {
-            self.top_row = cursor.row - self.visible_rows + 1;
+        if self.left_col < freeze_cols {
+            self.left_col = freeze_cols;
         }
-        if cursor.col < self.left_col {
-            self.left_col = cursor.col;
+
+        // Cursor in frozen region doesn't affect scroll
+        if cursor.row >= freeze_rows {
+            let scroll_row = cursor.row;
+            if scroll_row < self.top_row {
+                self.top_row = scroll_row;
+            }
+            if scroll_row >= self.top_row + self.visible_rows {
+                self.top_row = scroll_row - self.visible_rows + 1;
+            }
+            if self.top_row < freeze_rows {
+                self.top_row = freeze_rows;
+            }
         }
-        if cursor.col >= self.left_col + self.visible_cols {
-            self.left_col = cursor.col - self.visible_cols + 1;
+
+        if cursor.col >= freeze_cols {
+            let scroll_col = cursor.col;
+            if scroll_col < self.left_col {
+                self.left_col = scroll_col;
+            }
+            if scroll_col >= self.left_col + self.visible_cols {
+                self.left_col = scroll_col - self.visible_cols + 1;
+            }
+            if self.left_col < freeze_cols {
+                self.left_col = freeze_cols;
+            }
         }
     }
 

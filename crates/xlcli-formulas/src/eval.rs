@@ -9,6 +9,7 @@ pub trait EvalContext {
     fn current_cell(&self) -> CellAddr;
     fn current_sheet(&self) -> u16;
     fn resolve_sheet(&self, name: &str) -> Option<u16>;
+    fn resolve_named_range(&self, _name: &str) -> Option<(CellAddr, CellAddr)> { None }
 }
 
 pub fn evaluate(expr: &Expr, ctx: &dyn EvalContext, registry: &FunctionRegistry) -> CellValue {
@@ -58,6 +59,13 @@ pub fn evaluate(expr: &Expr, ctx: &dyn EvalContext, registry: &FunctionRegistry)
             let lval = evaluate(left, ctx, registry);
             let rval = evaluate(right, ctx, registry);
             eval_binop(*op, &lval, &rval)
+        }
+
+        Expr::NamedRef(name) => {
+            match ctx.resolve_named_range(name) {
+                Some((start, _end)) => ctx.get_cell_value(start),
+                None => CellValue::Error(CellError::Name),
+            }
         }
 
         Expr::FnCall { name, args } => {
@@ -132,6 +140,32 @@ fn cell_values_equal(a: &CellValue, b: &CellValue) -> bool {
             s.is_empty()
         }
         _ => false,
+    }
+}
+
+pub fn eval_as_range(arg: &crate::ast::Expr, ctx: &dyn EvalContext) -> Vec<CellValue> {
+    match arg {
+        crate::ast::Expr::Range { start, end } => collect_range_values(start, end, ctx),
+        crate::ast::Expr::NamedRef(name) => collect_named_range_values(name, ctx),
+        other => {
+            let val = evaluate(other, ctx, &crate::registry::FunctionRegistry::default());
+            if val.is_empty() { vec![] } else { vec![val] }
+        }
+    }
+}
+
+pub fn collect_named_range_values(name: &str, ctx: &dyn EvalContext) -> Vec<CellValue> {
+    match ctx.resolve_named_range(name) {
+        Some((start, end)) => {
+            let mut values = Vec::new();
+            for r in start.row..=end.row {
+                for c in start.col..=end.col {
+                    values.push(ctx.get_cell_value(CellAddr::new(start.sheet, r, c)));
+                }
+            }
+            values
+        }
+        None => vec![],
     }
 }
 

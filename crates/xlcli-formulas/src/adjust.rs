@@ -116,6 +116,7 @@ fn expr_to_string(expr: &Expr) -> String {
             let arg_strs: Vec<String> = args.iter().map(|a| expr_to_string(a)).collect();
             format!("{}({})", name, arg_strs.join(","))
         }
+        Expr::NamedRef(name) => name.clone(),
     }
 }
 

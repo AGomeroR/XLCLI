@@ -153,13 +153,17 @@ impl<'src> Parser<'src> {
 
                 Ok(cell)
             }
-            Some(Token::FuncName(..)) => {
+            Some(Token::Ident(..)) => {
                 let (_, slice) = self.advance().unwrap();
-                let name = slice.to_uppercase();
-                self.expect(&Token::LParen)?;
-                let args = self.parse_arg_list()?;
-                self.expect(&Token::RParen)?;
-                Ok(Expr::FnCall { name, args })
+                let slice = slice.to_string();
+                if self.peek() == Some(&Token::LParen) {
+                    self.advance();
+                    let args = self.parse_arg_list()?;
+                    self.expect(&Token::RParen)?;
+                    Ok(Expr::FnCall { name: slice.to_uppercase(), args })
+                } else {
+                    Ok(Expr::NamedRef(slice))
+                }
             }
             Some(Token::LParen) => {
                 self.advance();

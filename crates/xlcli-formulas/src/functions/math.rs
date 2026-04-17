@@ -103,6 +103,13 @@ fn collect_numbers(args: &[Expr], ctx: &dyn EvalContext, reg: &FunctionRegistry)
                     }
                 }
             }
+            Expr::NamedRef(name) => {
+                for val in crate::eval::collect_named_range_values(name, ctx) {
+                    if let Some(n) = val.as_f64() {
+                        nums.push(n);
+                    }
+                }
+            }
             _ => {
                 let val = evaluate(arg, ctx, reg);
                 if let Some(n) = val.as_f64() {

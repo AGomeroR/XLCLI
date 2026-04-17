@@ -1,0 +1,1969 @@
+           Claude Code v2.1.112
+ ▐▛███▜▌   Sonnet 4.6 · Claude Pro
+▝▜█████▛▘  ~/Work/CLI_excel
+  ▘▘ ▝▝    Welcome to Opus 4.7 xhigh! · /effort to tune speed vs. intellige…
+
+✻ Conversation compacted (ctrl+o for history)
+
+  ⎿  Read crates/xlcli-formulas/src/token.rs (70 lines)
+  ⎿  Read crates/xlcli-formulas/src/adjust.rs (158 lines)
+  ⎿  Referenced file crates/xlcli-formulas/src/functions/stat.rs
+  ⎿  Referenced file crates/xlcli-formulas/src/functions/math.rs
+  ⎿  Read crates/xlcli-formulas/src/lib.rs (15 lines)
+  ⎿  Skills restored (caveman:caveman)
+
+● Update(crates/xlcli-formulas/src/token.rs)
+  ⎿  Added 2 lines, removed 5 lines
+      13      #[regex(r"(?i)(TRUE|FALSE)")]
+      14      Boolean(&'src str),
+      15  
+      16 -    #[regex(r"[A-Za-z_][A-Za-z0-9_.]*", check_func_name)]      
+      17 -    FuncName(&'src str),                                       
+      16 +    #[regex(r"[A-Za-z_][A-Za-z0-9_.]*")]                       
+      17 +    Ident(&'src str),                                          
+      18  
+      19 -    #[regex(r"[A-Za-z_][A-Za-z0-9_]*", check_named_ref)]       
+      20 -    NamedRef(&'src str),                                       
+      21 -                                                               
+      19      #[regex(r"'[^']+'\!\$?[A-Za-z]{1,3}\$?[0-9]+")]
+      20      SheetRefQuoted(&'src str),
+      21  
+
+● Now check parser for FuncName/NamedRef usage.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(crates/xlcli-formulas/src/parser.rs)
+  ⎿  Added 10 lines, removed 10 lines
+      153  
+      154                  Ok(cell)
+      155              }
+      156 -            Some(Token::FuncName(..)) => {                    
+      156 +            Some(Token::Ident(..)) => {                       
+      157                  let (_, slice) = self.advance().unwrap();
+      158 -                let name = slice.to_uppercase();              
+      159 -                self.expect(&Token::LParen)?;                 
+      160 -                let args = self.parse_arg_list()?;            
+      161 -                self.expect(&Token::RParen)?;                 
+      162 -                Ok(Expr::FnCall { name, args })               
+      158 +                let slice = slice.to_string();                
+      159 +                if self.peek() == Some(&Token::LParen) {      
+      160 +                    self.advance();                           
+      161 +                    let args = self.parse_arg_list()?;        
+      162 +                    self.expect(&Token::RParen)?;             
+      163 +                    Ok(Expr::FnCall { name: slice.to_uppercase
+          +(), args })                                                   
+      164 +                } else {                                      
+      165 +                    Ok(Expr::NamedRef(slice))                 
+      166 +                }                                             
+      167              }
+      164 -            Some(Token::NamedRef(..)) => {                    
+      165 -                let (_, slice) = self.advance().unwrap();     
+      166 -                Ok(Expr::NamedRef(slice.to_string()))         
+      167 -            }                                                 
+      168              Some(Token::LParen) => {
+      169                  self.advance();
+      170                  let expr = self.parse_expr(0)?;
+
+● Build test.
+
+● Bash(cargo build -p xlcli-formulas 2>&1 | tail -50)
+  ⎿     Compiling xlcli-core v0.1.0 (/home/agomeror/Work/CLI_excel/crates/x
+     lcli-core)
+        Compiling xlcli-formulas v0.1.0 (/home/agomeror/Work/CLI_excel/crat
+     … +3 lines (ctrl+o to expand)
+
+● Formulas compile. Build whole workspace.
+
+● Bash(cargo build 2>&1 | tail -60)
+  ⎿     Compiling xlcli-formulas v0.1.0 (/home/agomeror/Work/CLI_excel/crat
+     es/xlcli-formulas)
+        Compiling xlcli-tui v0.1.0 (/home/agomeror/Work/CLI_excel/crates/xl
+     … +24 lines (ctrl+o to expand)
+
+● Builds clean. Now wire resolve_named_range into TUI context + add :name/:names
+   commands.
+
+  Searched for 2 patterns, read 2 files (ctrl+o to expand)
+
+● Add resolve_named_range to ctx.
+
+● Update(crates/xlcli-tui/src/app.rs)
+  ⎿  Added 6 lines
+      2040              .find(|(_, s)| s.name.eq_ignore_ascii_case(name))
+      2041              .map(|(i, _)| i as u16)
+      2042      }
+      2043 +                                                             
+      2044 +    fn resolve_named_range(&self, name: &str) -> Option<(Cell
+           +Addr, CellAddr)> {                                           
+      2045 +        self.workbook.named_ranges.iter()                    
+      2046 +            .find(|nr| nr.name.eq_ignore_ascii_case(name))   
+      2047 +            .map(|nr| (nr.range.start, nr.range.end))        
+      2048 +    }                                                        
+      2049  }
+      2050  
+      2051  fn parse_cell_address(addr: &str) -> Option<(u32, u16)> {
+
+● Now add :name / :names commands. Find command dispatch.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(crates/xlcli-tui/src/app.rs)
+  ⎿  Added 4 lines
+      1542              self.unfilter_all();
+      1543          } else if let Some(rest) = cmd.strip_prefix("unfilter
+             ") {
+      1544              self.unfilter_column(rest.trim());
+      1545 +        } else if cmd == "names" {                           
+      1546 +            self.list_named_ranges();                        
+      1547 +        } else if let Some(rest) = cmd.strip_prefix("name ") 
+           +{                                                            
+      1548 +            self.handle_name_command(rest.trim());           
+      1549          } else {
+      1550              self.status_message = Some(format!("Unknown comma
+            nd: {}", cmd));
+      1551          }
+
+● Now add handlers. Find good place — check existing helper near sheet command.
+
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● Add helpers. Insert near handle_sheet_command.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(crates/xlcli-tui/src/app.rs)
+  ⎿  Added 87 lines
+      1551          }
+      1552      }
+      1553  
+      1554 +    fn handle_name_command(&mut self, rest: &str) {          
+      1555 +        if let Some(name_to_del) = rest.strip_prefix("delete 
+           +") {                                                         
+      1556 +            let name_to_del = name_to_del.trim();            
+      1557 +            let before = self.workbook.named_ranges.len();   
+      1558 +            self.workbook.named_ranges.retain(|nr| !nr.name.e
+           +q_ignore_ascii_case(name_to_del));                           
+      1559 +            if self.workbook.named_ranges.len() < before {   
+      1560 +                self.status_message = Some(format!("Deleted n
+           +ame: {}", name_to_del));                                     
+      1561 +            } else {                                         
+      1562 +                self.status_message = Some(format!("Name not 
+           +found: {}", name_to_del));                                   
+      1563 +            }                                                
+      1564 +            return;                                          
+      1565 +        }                                                    
+      1566 +        let parts: Vec<&str> = rest.splitn(2, ' ').collect();
+      1567 +        if parts.len() != 2 {                                
+      1568 +            self.status_message = Some("Usage: :name <Name> <
+           +A1:B10>".to_string());                                       
+      1569 +            return;                                          
+      1570 +        }                                                    
+      1571 +        let name = parts[0].trim().to_string();              
+      1572 +        let range_str = parts[1].trim();                     
+      1573 +        let sheet = self.workbook.active_sheet;              
+      1574 +        let range_part = if let Some(idx) = range_str.find('!
+           +') {                                                         
+      1575 +            let sheet_name = &range_str[..idx];              
+      1576 +            let sheet_name = sheet_name.trim_matches('\'');  
+      1577 +            match self.workbook.sheets.iter().position(|s| s.
+           +name.eq_ignore_ascii_case(sheet_name)) {                     
+      1578 +                Some(_i) => {                                
+      1579 +                    // sheet override currently same-sheet on
+           +ly; store resolved below                                     
+      1580 +                }                                            
+      1581 +                None => {                                    
+      1582 +                    self.status_message = Some(format!("Unkno
+           +wn sheet: {}", sheet_name));                                 
+      1583 +                    return;                                  
+      1584 +                }                                            
+      1585 +            }                                                
+      1586 +            &range_str[idx+1..]                              
+      1587 +        } else {                                             
+      1588 +            range_str                                        
+      1589 +        };                                                   
+      1590 +        let (start, end) = match range_part.find(':') {      
+      1591 +            Some(i) => {                                     
+      1592 +                let a = parse_cell_address(&range_part[..i]);
+      1593 +                let b = parse_cell_address(&range_part[i+1..]
+           +);                                                           
+      1594 +                match (a, b) {                               
+      1595 +                    (Some((r1, c1)), Some((r2, c2))) => (    
+      1596 +                        CellAddr::new(sheet as u16, r1, c1), 
+      1597 +                        CellAddr::new(sheet as u16, r2, c2), 
+      1598 +                    ),                                       
+      1599 +                    _ => {                                   
+      1600 +                        self.status_message = Some("Invalid r
+           +ange".to_string());                                          
+      1601 +                        return;                              
+      1602 +                    }                                        
+      1603 +                }                                            
+      1604 +            }                                                
+      1605 +            None => match parse_cell_address(range_part) {   
+      1606 +                Some((r, c)) => {                            
+      1607 +                    let a = CellAddr::new(sheet as u16, r, c)
+           +;                                                            
+      1608 +                    (a, a)                                   
+      1609 +                }                                            
+      1610 +                None => {                                    
+      1611 +                    self.status_message = Some("Invalid cell"
+           +.to_string());                                               
+      1612 +                    return;                                  
+      1613 +                }                                            
+      1614 +            },                                               
+      1615 +        };                                                   
+      1616 +        self.workbook.named_ranges.retain(|nr| !nr.name.eq_ig
+           +nore_ascii_case(&name));                                     
+      1617 +        self.workbook.named_ranges.push(xlcli_core::range::Na
+           +medRange {                                                   
+      1618 +            name: name.clone(),                              
+      1619 +            range: xlcli_core::range::CellRange::new(start, e
+           +nd),                                                         
+      1620 +        });                                                  
+      1621 +        self.status_message = Some(format!("Named: {}", name)
+           +);                                                           
+      1622 +    }                                                        
+      1623 +                                                             
+      1624 +    fn list_named_ranges(&mut self) {                        
+      1625 +        if self.workbook.named_ranges.is_empty() {           
+      1626 +            self.status_message = Some("No named ranges".to_s
+           +tring());                                                    
+      1627 +            return;                                          
+      1628 +        }                                                    
+      1629 +        let list: Vec<String> = self.workbook.named_ranges.it
+           +er()                                                         
+      1630 +            .map(|nr| {                                      
+      1631 +                let s = nr.range.start;                      
+      1632 +                let e = nr.range.end;                        
+      1633 +                format!("{}={}{}:{}{}", nr.name,             
+      1634 +                    CellAddr::col_name(s.col), s.row + 1,    
+      1635 +                    CellAddr::col_name(e.col), e.row + 1)    
+      1636 +            })                                               
+      1637 +            .collect();                                      
+      1638 +        self.status_message = Some(list.join(", "));         
+      1639 +    }                                                        
+      1640 +                                                             
+      1641      fn handle_sheet_command(&mut self, rest: &str) {
+      1642          let parts: Vec<&str> = rest.splitn(3, ' ').collect();
+      1643          match parts[0] {
+
+● Bash(cargo build 2>&1 | tail -40)
+  ⎿     Compiling xlcli-tui v0.1.0 (/home/agomeror/Work/CLI_excel/crates/xl
+     cli-tui)
+     warning: method `resolve_sheet_name` is never used
+     … +23 lines (ctrl+o to expand)
+
+● Builds. Named ranges wired. Test quick:
+
+● Bash(cargo test -p xlcli-formulas 2>&1 | tail -20)  ⎿     Compiling xlcli-formulas v0.1.0 (/home/agomeror/Work/CLI_excel/crat
+     es/xlcli-formulas)
+         Finished `test` profile [unoptimized + debuginfo] target(s) in 1.0
+     … +21 lines (ctrl+o to expand)
+
+● Tests pass. Update CHEATSHEET for :name / :names.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(CHEATSHEET.md)
+  ⎿  Added 11 lines
+      215  | `:headers 1`         | Set row 1 as header row              
+                  |
+      216  | `:unheaders`         | Remove header row                    
+                  |
+      217  
+      218 +### Named Ranges                                              
+      219 +                                                              
+      220 +| Command                     | Action                        
+          +              |                                               
+      221 +|-----------------------------|-------------------------------
+          +--------------|                                               
+      222 +| `:name MyRange A1:B10`      | Define named range `MyRange` =
+          + A1:B10       |                                               
+      223 +| `:name Total B5`            | Define single-cell name `Total
+          +` = B5        |                                               
+      224 +| `:name delete MyRange`      | Delete named range            
+          +              |                                               
+      225 +| `:names`                    | List all named ranges         
+          +              |                                               
+      226 +                                                              
+      227 +Use names directly in formulas: `=SUM(MyRange)`, `=Total*2`.  
+      228 +                                                              
+      229  Header row displays bold with background highlight. Sort autom
+           atically skips header row. Clicking or pressing `Shift+Enter` 
+           on a header cell opens the filter dialog.
+      230  
+      231  ### AutoFilter
+
+● Named ranges done. Summary:
+
+  - token.rs: merged FuncName+NamedRef → single Ident, resolved logos conflict.
+  - parser.rs: disambiguates by lookahead for (.
+  - app.rs: wired resolve_named_range, added :name, :name delete, :names
+  commands.
+  - CHEATSHEET.md: documented.
+  - Build clean, formula tests pass.
+
+  Next: conditional formatting, or verify named-range eval end-to-end in TUI.
+
+✻ Cogitated for 3m 6s
+
+❯ Tell me what changes you made so i test                                       
+
+● Changes to Test
+
+  New commands:
+  - :name MyRange A1:B10 — define named range
+  - :name Total B5 — single cell name
+  - :name delete MyRange — remove name
+  - :names — list all names
+
+  Use in formulas:
+  - =SUM(MyRange) — sum range
+  - =Total*2 — single cell ref
+  - =AVERAGE(MyRange), =COUNT(MyRange), etc.
+
+  Test Plan
+
+  1. Open blank workbook: cargo run
+  2. Fill A1:A5 with numbers (1,2,3,4,5)
+  3. :name Nums A1:A5 → status shows "Named: Nums"
+  4. Go to C1, type =SUM(Nums) → expect 15
+  5. Go to C2, type =AVERAGE(Nums) → expect 3
+  6. :names → status shows Nums=A1:A5
+  7. Put 42 in B1, :name X B1, then =X*2 → expect 84
+  8. :name delete Nums → formula in C1 becomes #NAME?
+  9. Bad input: :name Foo ZZZZ → "Invalid cell/range" error
+
+  Regression check (lexer refactor touched all formulas):
+  - =SUM(A1:A5) still works
+  - =IF(A1>0,"yes","no") still works
+  - =Sheet2!A1 still works
+  - Function names: =SUMIF(...), =VLOOKUP(...)
+
+  Report anything broken.
+
+❯ How do i give names using visual mode?                                        
+
+● Not implemented yet. Add now.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(crates/xlcli-tui/src/app.rs)
+  ⎿  Added 26 lines, removed 3 lines
+      1564              return;
+      1565          }
+      1566          let parts: Vec<&str> = rest.splitn(2, ' ').collect();
+      1567 -        if parts.len() != 2 {                                
+      1568 -            self.status_message = Some("Usage: :name <Name> <
+           -A1:B10>".to_string());                                       
+      1567 +        let sheet = self.workbook.active_sheet;              
+      1568 +        // Single-arg + visual: use selection                
+      1569 +        if parts.len() == 1 {                                
+      1570 +            if let Some(anchor) = self.visual_anchor {       
+      1571 +                let name = parts[0].trim().to_string();      
+      1572 +                if name.is_empty() {                         
+      1573 +                    self.status_message = Some("Usage: :name 
+           +<Name>".to_string());                                        
+      1574 +                    return;                                  
+      1575 +                }                                            
+      1576 +                let r1 = anchor.row.min(self.cursor.row);    
+      1577 +                let r2 = anchor.row.max(self.cursor.row);    
+      1578 +                let c1 = anchor.col.min(self.cursor.col);    
+      1579 +                let c2 = anchor.col.max(self.cursor.col);    
+      1580 +                let start = CellAddr::new(sheet as u16, r1, c
+           +1);                                                          
+      1581 +                let end = CellAddr::new(sheet as u16, r2, c2)
+           +;                                                            
+      1582 +                self.workbook.named_ranges.retain(|nr| !nr.na
+           +me.eq_ignore_ascii_case(&name));                             
+      1583 +                self.workbook.named_ranges.push(xlcli_core::r
+           +ange::NamedRange {                                           
+      1584 +                    name: name.clone(),                      
+      1585 +                    range: xlcli_core::range::CellRange::new(
+           +start, end),                                                 
+      1586 +                });                                          
+      1587 +                self.visual_anchor = None;                   
+      1588 +                self.mode = Mode::Normal;                    
+      1589 +                self.status_message = Some(format!("Named: {}
+           +", name));                                                   
+      1590 +                return;                                      
+      1591 +            }                                                
+      1592 +            self.status_message = Some("Usage: :name <Name> <
+           +A1:B10> (or select range in visual mode)".to_string());      
+      1593              return;
+      1594          }
+      1595          let name = parts[0].trim().to_string();
+      1596          let range_str = parts[1].trim();
+      1573 -        let sheet = self.workbook.active_sheet;              
+      1597          let range_part = if let Some(idx) = range_str.find('!
+            ') {
+      1598              let sheet_name = &range_str[..idx];
+      1599              let sheet_name = sheet_name.trim_matches('\'');
+
+● Bash(cargo build 2>&1 | tail -15)
+  ⎿       |            ^^^^^^^^^^^^^^^^^^
+          |
+          = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by de
+     … +14 lines (ctrl+o to expand)
+
+● Builds. Update CHEATSHEET.
+
+● Update(CHEATSHEET.md)
+  ⎿  Added 1 line
+      221  |-----------------------------|-------------------------------
+           --------------|
+      222  | `:name MyRange A1:B10`      | Define named range `MyRange` =
+            A1:B10       |
+      223  | `:name Total B5`            | Define single-cell name `Total
+           ` = B5        |
+      224 +| `:name MyRange` (visual)    | Name the current visual select
+          +ion           |                                               
+      225  | `:name delete MyRange`      | Delete named range            
+                         |
+      226  | `:names`                    | List all named ranges         
+                         |
+      227  
+
+● Usage
+
+  1. Enter visual mode: v (cell) or V (row) or Ctrl-v (block)
+  2. Select range with movement keys
+  3. :name MyRange → names the selection, exits visual
+
+  Test: v then 5j3l to select A1:D6, then :name Block → status "Named: Block".
+  Verify :names.
+
+✻ Brewed for 30s
+
+❯ I cannot call the command line while in visual mode                           
+
+  Searched for 3 patterns, read 1 file (ctrl+o to expand)
+
+● Update(crates/xlcli-tui/src/input.rs)
+  ⎿  Added 4 lines
+      368          (KeyModifiers::NONE, KeyCode::Char('f')) => {
+      369              app.visual_fill();
+      370          }
+      371 +        (KeyModifiers::NONE, KeyCode::Char(':')) => {         
+      372 +            app.mode = Mode::Command;                         
+      373 +            app.command_buffer.clear();                       
+      374 +        }                                                     
+      375          _ => {}
+      376      }
+      377  }
+
+● Also clear anchor when command cancelled via Esc:
+
+● Update(crates/xlcli-tui/src/input.rs)
+  ⎿  Added 2 lines
+      222          KeyCode::Esc => {
+      223              app.command_buffer.clear();
+      224              app.mode = Mode::Normal;
+      225 +            app.visual_anchor = None;                         
+      226          }
+      227          KeyCode::Backspace => {
+      228              app.command_buffer.pop();
+      229              if app.command_buffer.is_empty() {
+      230                  app.mode = Mode::Normal;
+      231 +                app.visual_anchor = None;                     
+      232              }
+      233          }
+      234          KeyCode::Char(c) => {
+
+● Bash(cargo build 2>&1 | tail -5)
+  ⎿  22 |     pub fn update_for_cursor(&mut self, cursor: &CellAddr) {
+        |            ^^^^^^^^^^^^^^^^^
+     … +3 lines (ctrl+o to expand)
+
+● Fixed. Now visual mode accepts : → command line. Test: v, select range, :name 
+  Block, Enter.
+
+✻ Baked for 37s
+
+※ recap: Building Phase 4 named ranges for xlcli; just wired `:` into visual mode so `:name MyRange` works on the current selection. Next: launch the TUI and verify end-to-end (select range, name it, use in `=SUM(Name)`). (disable recaps in /config)
+
+❯ Perfect, continue                                                             
+  Searched for 3 patterns, read 3 files, listed 2 directories (ctrl+o to expand)
+
+● Conditional formatting next on plan. Want confirm scope before code:
+
+  Options:
+  1. Value-based rules: :cf <range> gt 100 red-bg → cells > 100 get red bg.
+  Basic ops: gt/lt/eq/neq/gte/lte/between/contains.
+  2. Value + formula-based: adds :cf formula <range> <formula> <style> for rules
+   like =MOD(ROW(),2)=0 (banding).
+  3. Color scales / data bars: heatmap-style gradient (red→yellow→green).
+
+  Style options per rule: bg color, fg color, bold. Colors by name
+  (red/green/blue/yellow/cyan/magenta/orange/gray/white).
+
+  Commands shape:
+  - :cf <range> gt 100 bg=red (or visual: :cf gt 100 bg=red)
+  - :cf list
+  - :cf clear (visual or all)
+  - Persistence: in-memory only, or also save to xlsx?
+
+  Which scope + should it persist to file?
+
+✻ Brewed for 41s
+
+※ recap: Building xlcli Phase 4: just finished named ranges with visual-mode support; conditional formatting is next. Waiting on your answer about scope (value rules vs formula vs color scales) and whether rules should persist to xlsx before coding.
+
+❯ This is the list of cf i want to use: 1. background color, text color, bold,  
+  italic. Then for [Image #1] these but in english. then a command to set base  
+  format, :cf clean. If you think about others, ask me and lets expand it       
+  ⎿  [Image #1]
+
+● Got it. Translated list:
+
+  - Negrita = bold
+  - Itálica = italic
+  - Subrayado sencillo = underline
+  - Subrayado doble = double underline
+  - Tachado = strikethrough
+  - Suprarrayado = overline
+  - Superíndice / Subíndice = super/sub
+  - Sombra / Contornear = shadow / outline
+  - Ajustar texto = wrap text
+  - MAYÚSCULAS / minúsculas / Cambiar / Oración / Iniciales / aLTERNAR = case
+  transforms
+  - Anchura media/completa, Hiragana/Katakana = width + kana (CJK only)
+
+  Terminal reality check
+
+  Renderable in TUI via ANSI:
+  - bold, italic, underline, strikethrough, overline, double-underline, bg, fg
+
+  Not renderable in terminal (would need dropping):
+  - superscript/subscript (needs half-height glyphs)
+  - shadow, outline (GUI-only)
+  - wrap text (possible but big render rewrite)
+  - hiragana/katakana, half/full width (locale transforms, not styling)
+
+  Case transforms (UPPER/lower/Title/Sentence/tOGGLE) — not styles, they change 
+  the value. Better as separate :case upper command on selection, not part of
+  :cf.
+
+  Questions
+
+  1. Drop non-renderable ones (super/sub, shadow, outline, kana, width)? →
+  yes/no
+  2. Case transforms as separate :case command (not cf)? → yes/no
+  3. :cf base <style> = set default style for sheet? Or = clear all cf + apply
+  one base? Clarify.
+  4. :cf clean — clean what: all cf rules on sheet? Or only on visual selection?
+  5. Wrap text worth adding (complex render change)?
+
+❯ 1. Yes. 2. Yes. 3.Yes. 4.On visual selection or if i say :cf clean A1:B7,     
+  that selection. 5.Nope                                                        
+
+● Plan before code:
+
+  Data
+
+  Extend CellStyle: add strikethrough, overline, double_underline bools.
+
+  New CondRule in core:
+  pub struct CondRule {
+      pub range: CellRange,
+      pub cond: Condition,  // Gt(f64), Lt, Gte, Lte, Eq, Neq, Between(f64,f64),
+   Contains(String), Blanks, NonBlanks
+      pub style: CondStyle, // partial overlay: bg, fg, bold, italic, under, 
+  dunder, strike, over (all Option)
+  }
+
+  Sheet gets: base_style: CondStyle (applied to all cells) + cond_rules: 
+  Vec<CondRule>.
+
+  Render merge order: base → cell's own style → matching cf rules in order.
+
+  Commands
+
+  - :cf <cond> <style> — visual selection range
+  - :cf <range> <cond> <style> — explicit
+  - :cf base <style> — set sheet base (visual ignored)
+  - :cf clean — clear cf on visual selection
+  - :cf clean <range> — clear on explicit range
+  - :cf clean all — clear all on sheet
+  - :cf list — show rules
+
+  Cond syntax: gt 100, lt 0, gte 5, lte 5, eq 7, neq 0, between 1 10, contains 
+  foo, blanks, nonblanks
+
+  Style syntax (space-separated): bg=red fg=white bold italic under dunder 
+  strike over
+
+  Colors: red green blue yellow cyan magenta white black gray orange none
+
+  Case
+
+  Separate: :case upper|lower|title|sentence|toggle — visual selection, mutates
+  values.
+
+  OK proceed?
+
+❯ Perfect, also, when visual selection or nothing selected, if a command :cf    
+  alone, i get pop up with: 1.A range indicator, is we had range selected in    
+  visual, that range appears, if not, blank and i can fill it up, as the other  
+  ones, make it VIM and mouse responsive                                        
+
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● Big task. Split in phases:
+
+  Phase A (now): data model + command-line version working end-to-end (:cf gt 
+  100 bg=red, :cf base, :cf clean, :cf list, :case upper). Render applies
+  styles.
+
+  Phase B (next): :cf alone → popup dialog matching sort/filter pattern.
+
+  Start Phase A.
+
+  1. Extend CellStyle
+
+● Update(crates/xlcli-core/src/style.rs)
+  ⎿  Added 3 lines
+       5      pub bold: bool,
+       6      pub italic: bool,
+       7      pub underline: bool,
+       8 +    pub double_underline: bool,                                
+       9 +    pub strikethrough: bool,                                   
+      10 +    pub overline: bool,                                        
+      11      pub fg_color: Option<Color>,
+      12      pub bg_color: Option<Color>,
+      13      pub number_format: Option<String>,
+
+● Update(crates/xlcli-core/src/style.rs)
+  ⎿  Added 3 lines
+      21              bold: false,
+      22              italic: false,
+      23              underline: false,
+      24 +            double_underline: false,                           
+      25 +            strikethrough: false,                              
+      26 +            overline: false,                                   
+      27              fg_color: None,
+      28              bg_color: None,
+      29              number_format: None,
+
+● 2. Add CondFormat module
+
+  Read 1 file (ctrl+o to expand)
+
+● Write(crates/xlcli-core/src/condfmt.rs)
+  ⎿  Wrote 96 lines to crates/xlcli-core/src/condfmt.rs
+       1 use crate::cell::CellValue;
+       2 use crate::range::CellRange;
+       3 use crate::style::Color;
+       4 use crate::types::CellAddr;
+       5 
+       6 #[derive(Debug, Clone, PartialEq)]
+       7 pub enum Condition {
+       8     Gt(f64),
+       9     Lt(f64),
+      10     Gte(f64),
+     … +88 lines (ctrl+o to expand)
+
+● Update(crates/xlcli-core/src/lib.rs)
+  ⎿  Added 1 line
+      1  pub mod cell;
+      2 +pub mod condfmt;                                                
+      3  pub mod dep_graph;
+      4  pub mod error;
+      5  pub mod range;
+
+● 3. Extend Sheet
+
+● Update(crates/xlcli-core/src/sheet.rs)
+  ⎿  Added 1 line
+      1  use std::collections::{HashMap, HashSet};
+      2  
+      3  use crate::cell::{Cell, CellValue};
+      4 +use crate::condfmt::{CondRule, StyleOverlay};                   
+      5  
+      6  #[derive(Debug, Clone, PartialEq)]
+      7  pub enum FilterCondition {
+
+● Update(crates/xlcli-core/src/sheet.rs)
+  ⎿  Added 2 lines
+      32      pub header_row: Option<u32>,
+      33      pub filters: HashMap<u16, FilterCondition>,
+      34      pub filter_range: Option<(u32, u32, u16, u16)>,
+      35 +    pub base_style: StyleOverlay,                              
+      36 +    pub cond_rules: Vec<CondRule>,                             
+      37  }
+      38  
+      39  impl Sheet {
+
+● Update(crates/xlcli-core/src/sheet.rs)
+  ⎿  Added 15 lines
+      50              header_row: None,
+      51              filters: HashMap::new(),
+      52              filter_range: None,
+      53 +            base_style: StyleOverlay::default(),               
+      54 +            cond_rules: Vec::new(),                            
+      55          }
+      56      }
+      57  
+      58 +    pub fn effective_style(&self, row: u32, col: u16, base: &cr
+         +ate::style::CellStyle) -> crate::style::CellStyle {            
+      59 +        let mut s = base.clone();                              
+      60 +        self.base_style.apply(&mut s);                         
+      61 +        let addr = crate::types::CellAddr::new(0, row, col);   
+      62 +        let val = self.get_cell_value(row, col);               
+      63 +        for rule in &self.cond_rules {                         
+      64 +            if rule.applies_to(&addr) && rule.cond.matches(val)
+         + {                                                             
+      65 +                rule.style.apply(&mut s);                      
+      66 +            }                                                  
+      67 +        }                                                      
+      68 +        s                                                      
+      69 +    }                                                          
+      70 +                                                               
+      71      pub fn get_cell(&self, row: u32, col: u16) -> Option<&Cell>
+           {
+      72          self.cells.get(&(row, col))
+      73      }
+
+● Bash(cargo build -p xlcli-core 2>&1 | tail -20)
+  ⎿     Compiling xlcli-core v0.1.0 (/home/agomeror/Work/CLI_excel/crates/x
+     lcli-core)
+         Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.46
+     s
+
+● 4. Render — apply overlay
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+● Update(crates/xlcli-tui/src/render.rs)
+  ⎿  Added 14 lines, removed 1 line
+      298  
+      299      let is_header = app.is_header_row(data_row);
+      300  
+      301 +    let effective = sheet.effective_style(data_row, data_col, 
+          +&xlcli_core::style::CellStyle::default());                    
+      302 +                                                              
+      303      let style = if is_cursor {
+      304          if app.mode == Mode::Insert {
+      305              Style::default().fg(Color::White).bg(Color::Blue)
+     ...
+      311      } else if is_header {
+      312          Style::default().fg(Color::White).bg(Color::DarkGray).
+           add_modifier(Modifier::BOLD)
+      313      } else {
+      312 -        Style::default().fg(Color::White)                     
+      314 +        let mut s = Style::default().fg(Color::White);        
+      315 +        if let Some(c) = effective.fg_color {                 
+      316 +            s = s.fg(Color::Rgb(c.r, c.g, c.b));              
+      317 +        }                                                     
+      318 +        if let Some(c) = effective.bg_color {                 
+      319 +            s = s.bg(Color::Rgb(c.r, c.g, c.b));              
+      320 +        }                                                     
+      321 +        if effective.bold { s = s.add_modifier(Modifier::BOLD)
+          +; }                                                           
+      322 +        if effective.italic { s = s.add_modifier(Modifier::ITA
+          +LIC); }                                                       
+      323 +        if effective.underline || effective.double_underline {
+          + s = s.add_modifier(Modifier::UNDERLINED); }                  
+      324 +        if effective.strikethrough { s = s.add_modifier(Modifi
+          +er::CROSSED_OUT); }                                           
+      325 +        s                                                     
+      326      };
+      327  
+      328      spans.push(Span::styled(display, style));
+
+● Bash(cargo build 2>&1 | tail -20)
+  ⎿       |
+      286 | impl App {
+          | -------- method in this implementation
+     … +20 lines (ctrl+o to expand)
+
+● Builds. Now commands.
+
+  5. Commands
+
+● Update(crates/xlcli-tui/src/app.rs)
+  ⎿  Added 7 lines
+      1546              self.list_named_ranges();
+      1547          } else if let Some(rest) = cmd.strip_prefix("name ") 
+            {
+      1548              self.handle_name_command(rest.trim());
+      1549 +        } else if cmd == "cf" {                              
+      1550 +            // TODO Phase B: open dialog                     
+      1551 +            self.status_message = Some("Dialog not yet. Use :
+           +cf <cond> <style>".to_string());                             
+      1552 +        } else if let Some(rest) = cmd.strip_prefix("cf ") { 
+      1553 +            self.handle_cf_command(rest.trim());             
+      1554 +        } else if let Some(rest) = cmd.strip_prefix("case ") 
+           +{                                                            
+      1555 +            self.handle_case_command(rest.trim());           
+      1556          } else {
+      1557              self.status_message = Some(format!("Unknown comma
+            nd: {}", cmd));
+      1558          }
+
+● Update(crates/xlcli-tui/src/app.rs)
+  ⎿  Added 185 lines
+      1651          self.status_message = Some(format!("Named: {}", name)
+            );
+      1652      }
+      1653  
+      1654 +    fn handle_cf_command(&mut self, rest: &str) {            
+      1655 +        // :cf list                                          
+      1656 +        if rest == "list" { self.cf_list(); return; }        
+      1657 +        // :cf clean ...                                     
+      1658 +        if rest == "clean" {                                 
+      1659 +            self.cf_clean_visual();                          
+      1660 +            return;                                          
+      1661 +        }                                                    
+      1662 +        if let Some(arg) = rest.strip_prefix("clean ") {     
+      1663 +            let arg = arg.trim();                            
+      1664 +            if arg == "all" {                                
+      1665 +                let sheet = self.workbook.active_sheet_mut();
+      1666 +                let n = sheet.cond_rules.len();              
+      1667 +                sheet.cond_rules.clear();                    
+      1668 +                sheet.base_style = xlcli_core::condfmt::Style
+           +Overlay::default();                                          
+      1669 +                self.status_message = Some(format!("Cleared {
+           +} rules + base", n));                                        
+      1670 +            } else {                                         
+      1671 +                self.cf_clean_range(arg);                    
+      1672 +            }                                                
+      1673 +            return;                                          
+      1674 +        }                                                    
+      1675 +        // :cf base <style>                                  
+      1676 +        if let Some(rest) = rest.strip_prefix("base ") {     
+      1677 +            match parse_style_overlay(rest.trim()) {         
+      1678 +                Ok(overlay) => {                             
+      1679 +                    self.workbook.active_sheet_mut().base_sty
+           +le = overlay;                                                
+      1680 +                    self.status_message = Some("Base style se
+           +t".to_string());                                             
+      1681 +                }                                            
+      1682 +                Err(e) => self.status_message = Some(e),     
+      1683 +            }                                                
+      1684 +            return;                                          
+      1685 +        }                                                    
+      1686 +        // Determine range: either first token looks like ran
+           +ge OR visual selection                                       
+      1687 +        let (range, rest_args) = if let Some((maybe_range, re
+           +st_args)) = rest.split_once(' ') {                           
+      1688 +            if looks_like_range(maybe_range) {               
+      1689 +                match parse_range_arg(maybe_range, self.workb
+           +ook.active_sheet as u16) {                                   
+      1690 +                    Some(r) => (Some(r), rest_args.trim().to_
+           +string()),                                                   
+      1691 +                    None => {                                
+      1692 +                        self.status_message = Some("Invalid r
+           +ange".to_string());                                          
+      1693 +                        return;                              
+      1694 +                    }                                        
+      1695 +                }                                            
+      1696 +            } else {                                         
+      1697 +                (None, rest.to_string())                     
+      1698 +            }                                                
+      1699 +        } else {                                             
+      1700 +            (None, rest.to_string())                         
+      1701 +        };                                                   
+      1702 +        let range = if let Some(r) = range {                 
+      1703 +            r                                                
+      1704 +        } else if let Some(anchor) = self.visual_anchor {    
+      1705 +            let sheet = self.workbook.active_sheet as u16;   
+      1706 +            let r1 = anchor.row.min(self.cursor.row);        
+      1707 +            let r2 = anchor.row.max(self.cursor.row);        
+      1708 +            let c1 = anchor.col.min(self.cursor.col);        
+      1709 +            let c2 = anchor.col.max(self.cursor.col);        
+      1710 +            xlcli_core::range::CellRange::new(               
+      1711 +                CellAddr::new(sheet, r1, c1),                
+      1712 +                CellAddr::new(sheet, r2, c2),                
+      1713 +            )                                                
+      1714 +        } else {                                             
+      1715 +            self.status_message = Some("Select range in visua
+           +l or give :cf <range> <cond> <style>".to_string());          
+      1716 +            return;                                          
+      1717 +        };                                                   
+      1718 +        // Parse cond + style                                
+      1719 +        let (cond, style_str) = match parse_condition(&rest_a
+           +rgs) {                                                       
+      1720 +            Ok(c) => c,                                      
+      1721 +            Err(e) => { self.status_message = Some(e); return
+           +; }                                                          
+      1722 +        };                                                   
+      1723 +        let style = match parse_style_overlay(&style_str) {  
+      1724 +            Ok(s) => s,                                      
+      1725 +            Err(e) => { self.status_message = Some(e); return
+           +; }                                                          
+      1726 +        };                                                   
+      1727 +        if style.is_empty() {                                
+      1728 +            self.status_message = Some("Empty style. Use bold
+           +, italic, bg=red, fg=blue, etc".to_string());                
+      1729 +            return;                                          
+      1730 +        }                                                    
+      1731 +        self.workbook.active_sheet_mut().cond_rules.push(xlcl
+           +i_core::condfmt::CondRule {                                  
+      1732 +            range,                                           
+      1733 +            cond,                                            
+      1734 +            style,                                           
+      1735 +        });                                                  
+      1736 +        self.visual_anchor = None;                           
+      1737 +        self.status_message = Some("Rule added".to_string());
+      1738 +    }                                                        
+      1739 +                                                             
+      1740 +    fn cf_list(&mut self) {                                  
+      1741 +        let sheet = self.workbook.active_sheet();            
+      1742 +        if sheet.cond_rules.is_empty() && sheet.base_style.is
+           +_empty() {                                                   
+      1743 +            self.status_message = Some("No rules".to_string()
+           +);                                                           
+      1744 +            return;                                          
+      1745 +        }                                                    
+      1746 +        let mut parts: Vec<String> = Vec::new();             
+      1747 +        if !sheet.base_style.is_empty() {                    
+      1748 +            parts.push(format!("base={}", overlay_to_string(&
+           +sheet.base_style)));                                         
+      1749 +        }                                                    
+      1750 +        for (i, r) in sheet.cond_rules.iter().enumerate() {  
+      1751 +            parts.push(format!("#{} {} {} {}", i,            
+      1752 +                range_to_string(&r.range),                   
+      1753 +                cond_to_string(&r.cond),                     
+      1754 +                overlay_to_string(&r.style)));               
+      1755 +        }                                                    
+      1756 +        self.status_message = Some(parts.join(" | "));       
+      1757 +    }                                                        
+      1758 +                                                             
+      1759 +    fn cf_clean_visual(&mut self) {                          
+      1760 +        if let Some(anchor) = self.visual_anchor {           
+      1761 +            let sheet_idx = self.workbook.active_sheet as u16
+           +;                                                            
+      1762 +            let r1 = anchor.row.min(self.cursor.row);        
+      1763 +            let r2 = anchor.row.max(self.cursor.row);        
+      1764 +            let c1 = anchor.col.min(self.cursor.col);        
+      1765 +            let c2 = anchor.col.max(self.cursor.col);        
+      1766 +            let target = xlcli_core::range::CellRange::new(  
+      1767 +                CellAddr::new(sheet_idx, r1, c1),            
+      1768 +                CellAddr::new(sheet_idx, r2, c2),            
+      1769 +            );                                               
+      1770 +            let sheet = self.workbook.active_sheet_mut();    
+      1771 +            let before = sheet.cond_rules.len();             
+      1772 +            sheet.cond_rules.retain(|r| !ranges_overlap(&r.ra
+           +nge, &target));                                              
+      1773 +            let removed = before - sheet.cond_rules.len();   
+      1774 +            self.visual_anchor = None;                       
+      1775 +            self.status_message = Some(format!("Cleaned {} ru
+           +les", removed));                                             
+      1776 +        } else {                                             
+      1777 +            self.status_message = Some("No visual selection. 
+           +Use :cf clean <range> or :cf clean all".to_string());        
+      1778 +        }                                                    
+      1779 +    }                                                        
+      1780 +                                                             
+      1781 +    fn cf_clean_range(&mut self, arg: &str) {                
+      1782 +        let sheet_idx = self.workbook.active_sheet as u16;   
+      1783 +        let target = match parse_range_arg(arg, sheet_idx) { 
+      1784 +            Some(r) => r,                                    
+      1785 +            None => {                                        
+      1786 +                self.status_message = Some("Invalid range".to
+           +_string());                                                  
+      1787 +                return;                                      
+      1788 +            }                                                
+      1789 +        };                                                   
+      1790 +        let sheet = self.workbook.active_sheet_mut();        
+      1791 +        let before = sheet.cond_rules.len();                 
+      1792 +        sheet.cond_rules.retain(|r| !ranges_overlap(&r.range,
+           + &target));                                                  
+      1793 +        let removed = before - sheet.cond_rules.len();       
+      1794 +        self.status_message = Some(format!("Cleaned {} rules"
+           +, removed));                                                 
+      1795 +    }                                                        
+      1796 +                                                             
+      1797 +    fn handle_case_command(&mut self, arg: &str) {           
+      1798 +        let mode = match arg.trim() {                        
+      1799 +            "upper" => CaseMode::Upper,                      
+      1800 +            "lower" => CaseMode::Lower,                      
+      1801 +            "title" => CaseMode::Title,                      
+      1802 +            "sentence" => CaseMode::Sentence,                
+      1803 +            "toggle" => CaseMode::Toggle,                    
+      1804 +            _ => {                                           
+      1805 +                self.status_message = Some("Usage: :case uppe
+           +r|lower|title|sentence|toggle".to_string());                 
+      1806 +                return;                                      
+      1807 +            }                                                
+      1808 +        };                                                   
+      1809 +        let (r1, r2, c1, c2) = if let Some(anchor) = self.vis
+           +ual_anchor {                                                 
+      1810 +            (                                                
+      1811 +                anchor.row.min(self.cursor.row),             
+      1812 +                anchor.row.max(self.cursor.row),             
+      1813 +                anchor.col.min(self.cursor.col),             
+      1814 +                anchor.col.max(self.cursor.col),             
+      1815 +            )                                                
+      1816 +        } else {                                             
+      1817 +            (self.cursor.row, self.cursor.row, self.cursor.co
+           +l, self.cursor.col)                                          
+      1818 +        };                                                   
+      1819 +        let sheet = self.workbook.active_sheet_mut();        
+      1820 +        let mut count = 0;                                   
+      1821 +        for row in r1..=r2 {                                 
+      1822 +            for col in c1..=c2 {                             
+      1823 +                if let Some(cell) = sheet.get_cell(row, col) 
+           +{                                                            
+      1824 +                    if let xlcli_core::cell::CellValue::Strin
+           +g(s) = &cell.value {                                         
+      1825 +                        let new_s = transform_case(s, mode); 
+      1826 +                        let mut new_cell = cell.clone();     
+      1827 +                        new_cell.value = xlcli_core::cell::Ce
+           +llValue::String(new_s.into());                               
+      1828 +                        sheet.set_cell(row, col, new_cell);  
+      1829 +                        count += 1;                          
+      1830 +                    }                                        
+      1831 +                }                                            
+      1832 +            }                                                
+      1833 +        }                                                    
+      1834 +        self.visual_anchor = None;                           
+      1835 +        self.modified = true;                                
+      1836 +        self.status_message = Some(format!("Case changed on {
+           +} cells", count));                                           
+      1837 +    }                                                        
+      1838 +                                                             
+      1839      fn list_named_ranges(&mut self) {
+      1840          if self.workbook.named_ranges.is_empty() {
+      1841              self.status_message = Some("No named ranges".to_s
+            tring());
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(crates/xlcli-tui/src/app.rs)
+  ⎿  Added 215 lines
+      2354      }
+      2355  }
+      2356  
+      2357 +#[derive(Clone, Copy)]                                       
+      2358 +enum CaseMode { Upper, Lower, Title, Sentence, Toggle }      
+      2359 +                                                             
+      2360 +fn transform_case(s: &str, mode: CaseMode) -> String {       
+      2361 +    match mode {                                             
+      2362 +        CaseMode::Upper => s.to_uppercase(),                 
+      2363 +        CaseMode::Lower => s.to_lowercase(),                 
+      2364 +        CaseMode::Toggle => s.chars().map(|c| {              
+      2365 +            if c.is_uppercase() { c.to_lowercase().next().unw
+           +rap_or(c) }                                                  
+      2366 +            else if c.is_lowercase() { c.to_uppercase().next(
+           +).unwrap_or(c) }                                             
+      2367 +            else { c }                                       
+      2368 +        }).collect(),                                        
+      2369 +        CaseMode::Title => {                                 
+      2370 +            let mut out = String::with_capacity(s.len());    
+      2371 +            let mut at_word_start = true;                    
+      2372 +            for ch in s.chars() {                            
+      2373 +                if ch.is_whitespace() || !ch.is_alphanumeric(
+           +) {                                                          
+      2374 +                    out.push(ch);                            
+      2375 +                    at_word_start = true;                    
+      2376 +                } else if at_word_start {                    
+      2377 +                    out.extend(ch.to_uppercase());           
+      2378 +                    at_word_start = false;                   
+      2379 +                } else {                                     
+      2380 +                    out.extend(ch.to_lowercase());           
+      2381 +                }                                            
+      2382 +            }                                                
+      2383 +            out                                              
+      2384 +        }                                                    
+      2385 +        CaseMode::Sentence => {                              
+      2386 +            let lower = s.to_lowercase();                    
+      2387 +            let mut out = String::with_capacity(lower.len());
+      2388 +            let mut capitalize = true;                       
+      2389 +            for ch in lower.chars() {                        
+      2390 +                if capitalize && ch.is_alphabetic() {        
+      2391 +                    out.extend(ch.to_uppercase());           
+      2392 +                    capitalize = false;                      
+      2393 +                } else {                                     
+      2394 +                    out.push(ch);                            
+      2395 +                    if matches!(ch, '.' | '!' | '?') { capita
+           +lize = true; }                                               
+      2396 +                }                                            
+      2397 +            }                                                
+      2398 +            out                                              
+      2399 +        }                                                    
+      2400 +    }                                                        
+      2401 +}                                                            
+      2402 +                                                             
+      2403 +fn looks_like_range(s: &str) -> bool {                       
+      2404 +    // Range: contains ':' or is pure A1 cell                
+      2405 +    if s.contains(':') { return true; }                      
+      2406 +    let s_upper = s.to_uppercase();                          
+      2407 +    let mut bytes = s_upper.bytes();                         
+      2408 +    let mut saw_alpha = false;                               
+      2409 +    let mut saw_digit = false;                               
+      2410 +    while let Some(b) = bytes.next() {                       
+      2411 +        if b.is_ascii_alphabetic() {                         
+      2412 +            if saw_digit { return false; }                   
+      2413 +            saw_alpha = true;                                
+      2414 +        } else if b.is_ascii_digit() {                       
+      2415 +            if !saw_alpha { return false; }                  
+      2416 +            saw_digit = true;                                
+      2417 +        } else {                                             
+      2418 +            return false;                                    
+      2419 +        }                                                    
+      2420 +    }                                                        
+      2421 +    saw_alpha && saw_digit                                   
+      2422 +}                                                            
+      2423 +                                                             
+      2424 +fn parse_range_arg(s: &str, sheet: u16) -> Option<xlcli_core:
+           +:range::CellRange> {                                         
+      2425 +    if let Some((a, b)) = s.split_once(':') {                
+      2426 +        let (r1, c1) = parse_cell_address(a)?;               
+      2427 +        let (r2, c2) = parse_cell_address(b)?;               
+      2428 +        Some(xlcli_core::range::CellRange::new(              
+      2429 +            CellAddr::new(sheet, r1.min(r2), c1.min(c2)),    
+      2430 +            CellAddr::new(sheet, r1.max(r2), c1.max(c2)),    
+      2431 +        ))                                                   
+      2432 +    } else {                                                 
+      2433 +        let (r, c) = parse_cell_address(s)?;                 
+      2434 +        let a = CellAddr::new(sheet, r, c);                  
+      2435 +        Some(xlcli_core::range::CellRange::new(a, a))        
+      2436 +    }                                                        
+      2437 +}                                                            
+      2438 +                                                             
+      2439 +fn ranges_overlap(a: &xlcli_core::range::CellRange, b: &xlcli
+           +_core::range::CellRange) -> bool {                           
+      2440 +    if a.start.sheet != b.start.sheet { return false; }      
+      2441 +    a.start.row <= b.end.row && a.end.row >= b.start.row     
+      2442 +        && a.start.col <= b.end.col && a.end.col >= b.start.c
+           +ol                                                           
+      2443 +}                                                            
+      2444 +                                                             
+      2445 +fn parse_condition(args: &str) -> Result<(xlcli_core::condfmt
+           +::Condition, String), String> {                              
+      2446 +    use xlcli_core::condfmt::Condition;                      
+      2447 +    let toks: Vec<&str> = args.split_whitespace().collect(); 
+      2448 +    if toks.is_empty() { return Err("Missing condition".into(
+           +)); }                                                        
+      2449 +    let op = toks[0].to_lowercase();                         
+      2450 +    match op.as_str() {                                      
+      2451 +        "blanks" => Ok((Condition::Blanks, toks[1..].join(" "
+           +))),                                                         
+      2452 +        "nonblanks" => Ok((Condition::NonBlanks, toks[1..].jo
+           +in(" "))),                                                   
+      2453 +        "between" => {                                       
+      2454 +            if toks.len() < 3 { return Err("Usage: between <a
+           +> <b>".into()); }                                            
+      2455 +            let a: f64 = toks[1].parse().map_err(|_| "Bad num
+           +ber".to_string())?;                                          
+      2456 +            let b: f64 = toks[2].parse().map_err(|_| "Bad num
+           +ber".to_string())?;                                          
+      2457 +            Ok((Condition::Between(a, b), toks[3..].join(" ")
+           +))                                                           
+      2458 +        }                                                    
+      2459 +        "contains" => {                                      
+      2460 +            if toks.len() < 2 { return Err("Usage: contains <
+           +text>".into()); }                                            
+      2461 +            Ok((Condition::Contains(toks[1].to_string()), tok
+           +s[2..].join(" ")))                                           
+      2462 +        }                                                    
+      2463 +        "gt" | "lt" | "gte" | "lte" | "eq" | "neq" => {      
+      2464 +            if toks.len() < 2 { return Err(format!("Usage: {}
+           + <num>", op)); }                                             
+      2465 +            let n: f64 = toks[1].parse().map_err(|_| "Bad num
+           +ber".to_string())?;                                          
+      2466 +            let c = match op.as_str() {                      
+      2467 +                "gt" => Condition::Gt(n),                    
+      2468 +                "lt" => Condition::Lt(n),                    
+      2469 +                "gte" => Condition::Gte(n),                  
+      2470 +                "lte" => Condition::Lte(n),                  
+      2471 +                "eq" => Condition::Eq(n),                    
+      2472 +                "neq" => Condition::Neq(n),                  
+      2473 +                _ => unreachable!(),                         
+      2474 +            };                                               
+      2475 +            Ok((c, toks[2..].join(" ")))                     
+      2476 +        }                                                    
+      2477 +        _ => Err(format!("Unknown condition: {}", op)),      
+      2478 +    }                                                        
+      2479 +}                                                            
+      2480 +                                                             
+      2481 +fn parse_style_overlay(s: &str) -> Result<xlcli_core::condfmt
+           +::StyleOverlay, String> {                                    
+      2482 +    let mut overlay = xlcli_core::condfmt::StyleOverlay::defa
+           +ult();                                                       
+      2483 +    for tok in s.split_whitespace() {                        
+      2484 +        let (negate, key) = if let Some(rest) = tok.strip_pre
+           +fix('!') {                                                   
+      2485 +            (true, rest)                                     
+      2486 +        } else {                                             
+      2487 +            (false, tok)                                     
+      2488 +        };                                                   
+      2489 +        let val_bool = !negate;                              
+      2490 +        if let Some((k, v)) = key.split_once('=') {          
+      2491 +            match k {                                        
+      2492 +                "bg" => overlay.bg_color = Some(color_by_name
+           +(v)?),                                                       
+      2493 +                "fg" => overlay.fg_color = Some(color_by_name
+           +(v)?),                                                       
+      2494 +                _ => return Err(format!("Unknown style key: {
+           +}", k)),                                                     
+      2495 +            }                                                
+      2496 +        } else {                                             
+      2497 +            match key.to_lowercase().as_str() {              
+      2498 +                "bold" => overlay.bold = Some(val_bool),     
+      2499 +                "italic" => overlay.italic = Some(val_bool), 
+      2500 +                "under" | "underline" => overlay.underline = 
+           +Some(val_bool),                                              
+      2501 +                "dunder" | "doubleunder" => overlay.double_un
+           +derline = Some(val_bool),                                    
+      2502 +                "strike" | "strikethrough" => overlay.striket
+           +hrough = Some(val_bool),                                     
+      2503 +                "over" | "overline" => overlay.overline = Som
+           +e(val_bool),                                                 
+      2504 +                _ => return Err(format!("Unknown style: {}", 
+           +key)),                                                       
+      2505 +            }                                                
+      2506 +        }                                                    
+      2507 +    }                                                        
+      2508 +    Ok(overlay)                                              
+      2509 +}                                                            
+      2510 +                                                             
+      2511 +fn color_by_name(name: &str) -> Result<Option<xlcli_core::sty
+           +le::Color>, String> {                                        
+      2512 +    use xlcli_core::style::Color;                            
+      2513 +    let c = match name.to_lowercase().as_str() {             
+      2514 +        "none" | "default" => return Ok(None),               
+      2515 +        "red" => Color::new(220, 50, 50),                    
+      2516 +        "green" => Color::new(50, 200, 80),                  
+      2517 +        "blue" => Color::new(70, 130, 230),                  
+      2518 +        "yellow" => Color::new(230, 210, 50),                
+      2519 +        "cyan" => Color::new(70, 200, 210),                  
+      2520 +        "magenta" => Color::new(210, 80, 200),               
+      2521 +        "orange" => Color::new(230, 140, 50),                
+      2522 +        "white" => Color::new(240, 240, 240),                
+      2523 +        "black" => Color::new(20, 20, 20),                   
+      2524 +        "gray" | "grey" => Color::new(130, 130, 130),        
+      2525 +        _ => return Err(format!("Unknown color: {}", name)), 
+      2526 +    };                                                       
+      2527 +    Ok(Some(c))                                              
+      2528 +}                                                            
+      2529 +                                                             
+      2530 +fn overlay_to_string(o: &xlcli_core::condfmt::StyleOverlay) -
+           +> String {                                                   
+      2531 +    let mut parts = Vec::new();                              
+      2532 +    if let Some(b) = o.bold { parts.push(if b { "bold".into()
+           + } else { "!bold".into() }); }                               
+      2533 +    if let Some(b) = o.italic { parts.push(if b { "italic".in
+           +to() } else { "!italic".into() }); }                         
+      2534 +    if let Some(b) = o.underline { parts.push(if b { "under".
+           +into() } else { "!under".into() }); }                        
+      2535 +    if let Some(b) = o.double_underline { parts.push(if b { "
+           +dunder".into() } else { "!dunder".into() }); }               
+      2536 +    if let Some(b) = o.strikethrough { parts.push(if b { "str
+           +ike".into() } else { "!strike".into() }); }                  
+      2537 +    if let Some(b) = o.overline { parts.push(if b { "over".in
+           +to() } else { "!over".into() }); }                           
+      2538 +    if let Some(c) = o.bg_color { parts.push(format!("bg={}",
+           + color_to_hex(c))); }                                        
+      2539 +    if let Some(c) = o.fg_color { parts.push(format!("fg={}",
+           + color_to_hex(c))); }                                        
+      2540 +    parts.join(" ")                                          
+      2541 +}                                                            
+      2542 +                                                             
+      2543 +fn color_to_hex(c: Option<xlcli_core::style::Color>) -> Strin
+           +g {                                                          
+      2544 +    match c {                                                
+      2545 +        None => "none".into(),                               
+      2546 +        Some(c) => format!("#{:02X}{:02X}{:02X}", c.r, c.g, c
+           +.b),                                                         
+      2547 +    }                                                        
+      2548 +}                                                            
+      2549 +                                                             
+      2550 +fn cond_to_string(c: &xlcli_core::condfmt::Condition) -> Stri
+           +ng {                                                         
+      2551 +    use xlcli_core::condfmt::Condition::*;                   
+      2552 +    match c {                                                
+      2553 +        Gt(n) => format!("gt {}", n),                        
+      2554 +        Lt(n) => format!("lt {}", n),                        
+      2555 +        Gte(n) => format!("gte {}", n),                      
+      2556 +        Lte(n) => format!("lte {}", n),                      
+      2557 +        Eq(n) => format!("eq {}", n),                        
+      2558 +        Neq(n) => format!("neq {}", n),                      
+      2559 +        Between(a, b) => format!("between {} {}", a, b),     
+      2560 +        Contains(s) => format!("contains {}", s),            
+      2561 +        Blanks => "blanks".into(),                           
+      2562 +        NonBlanks => "nonblanks".into(),                     
+      2563 +    }                                                        
+      2564 +}                                                            
+      2565 +                                                             
+      2566 +fn range_to_string(r: &xlcli_core::range::CellRange) -> Strin
+           +g {                                                          
+      2567 +    format!("{}{}:{}{}",                                     
+      2568 +        CellAddr::col_name(r.start.col), r.start.row + 1,    
+      2569 +        CellAddr::col_name(r.end.col), r.end.row + 1)        
+      2570 +}                                                            
+      2571 +                                                             
+      2572  fn parse_cell_address(addr: &str) -> Option<(u32, u16)> {
+      2573      let addr = addr.trim().to_uppercase();
+      2574      let col_end = addr.bytes().position(|b| b.is_ascii_digit(
+            ))?;
+
+● Bash(cargo build 2>&1 | tail -30)
+  ⎿     Compiling xlcli-tui v0.1.0 (/home/agomeror/Work/CLI_excel/crates/xl
+     cli-tui)
+     warning: method `resolve_sheet_name` is never used
+     … +23 lines (ctrl+o to expand)
+
+● Builds. Update CHEATSHEET.
+
+● Update(CHEATSHEET.md)
+  ⎿  Added 33 lines
+      227  
+      228  Use names directly in formulas: `=SUM(MyRange)`, `=Total*2`.
+      229  
+      230 +### Conditional Formatting                                    
+      231 +                                                              
+      232 +Rules match a **condition** against cell value, then apply a *
+          +*style overlay**.                                             
+      233 +                                                              
+      234 +| Command                                      | Action       
+          +                               |                              
+      235 +|----------------------------------------------|--------------
+          +-------------------------------|                              
+      236 +| `:cf gt 100 bg=red`                          | Visual select
+          +ion: red bg when cell > 100    |                              
+      237 +| `:cf A1:B10 lt 0 fg=red bold`                | Explicit rang
+          +e                              |                              
+      238 +| `:cf contains foo italic`                    | Rule on visua
+          +l selection, italic if contains "foo" |                       
+      239 +| `:cf between 0 10 bg=green`                  |              
+          +                               |                              
+      240 +| `:cf blanks bg=gray`                         |              
+          +                               |                              
+      241 +| `:cf base bold fg=white`                     | Sheet-wide ba
+          +se style                       |                              
+      242 +| `:cf clean` (visual)                         | Remove rules 
+          +overlapping selection          |                              
+      243 +| `:cf clean A1:B5`                            | Remove rules 
+          +overlapping range              |                              
+      244 +| `:cf clean all`                              | Remove all ru
+          +les + base                     |                              
+      245 +| `:cf list`                                   | List rules   
+          +                               |                              
+      246 +                                                              
+      247 +**Conditions**: `gt N`, `lt N`, `gte N`, `lte N`, `eq N`, `neq
+          + N`, `between A B`, `contains TEXT`, `blanks`, `nonblanks`.   
+      248 +                                                              
+      249 +**Style tokens**: `bold`, `italic`, `under`, `dunder`, `strike
+          +`, `over`, `bg=<color>`, `fg=<color>`. Negate with `!` (e.g., 
+          +`!bold`).                                                     
+      250 +                                                              
+      251 +**Colors**: `red green blue yellow cyan magenta orange white b
+          +lack gray none`.                                              
+      252 +                                                              
+      253 +### Text Case                                                 
+      254 +                                                              
+      255 +| Command              | Action                               
+          +       |                                                      
+      256 +|----------------------|--------------------------------------
+          +-------|                                                      
+      257 +| `:case upper`        | UPPERCASE visual selection (or cursor
+          + cell) |                                                      
+      258 +| `:case lower`        | lowercase                            
+          +       |                                                      
+      259 +| `:case title`        | Title Case                           
+          +       |                                                      
+      260 +| `:case sentence`     | Sentence case                        
+          +       |                                                      
+      261 +| `:case toggle`       | tOGGLE cASE                          
+          +       |                                                      
+      262 +                                                              
+      263  Header row displays bold with background highlight. Sort autom
+           atically skips header row. Clicking or pressing `Shift+Enter` 
+           on a header cell opens the filter dialog.
+      264  
+      265  ### AutoFilter
+
+● Phase A done. Ready to test before Phase B (dialog).
+
+  Test
+
+  Make some numbers in A1:A5 (e.g., 10, 50, 100, 150, 200).
+  - :cf A1:A5 gt 100 bg=red bold → cells >100 go red + bold
+  - :cf A1:A5 lt 50 fg=blue
+  - :cf A1:A5 between 40 120 italic
+  - :cf base fg=cyan → all cells cyan text
+  - :cf list → rule summary
+  - :cf clean A1:A5 → clears
+  - Visual mode: v, select, :cf gt 0 bg=green
+  - :case upper on a text cell
+
+  Report issues, then I build the Phase B popup.
+
+✻ Cooked for 3m 28s
+
+※ recap: Building xlcli Phase 4 — just finished conditional formatting data model, render, and command-line interface (:cf, :case). Next: build the :cf popup dialog with VIM + mouse support, prefilled from visual selection.
+
+❯ :cf list must be a pop up, its too big to be down there. You did a great job, 
+   but i need it now all the :cf in a popup so i can select easier              
+
+● Big dialog incoming. Let me study existing dialog pattern first.
+
+  Searched for 3 patterns, read 1 file (ctrl+o to expand)
+
+● Dialog is substantial — ~500 LOC across 3 files. I'll build it in one pass.
+  Starting.
+
+  Read 1 file (ctrl+o to expand)
+
+● Add CfDialog structs
+
+● Update(crates/xlcli-tui/src/app.rs)
+  ⎿  Added 156 lines
+      252      pub all_checked: bool,
+      253  }
+      254  
+      255 +#[derive(Debug, Clone, Copy, PartialEq)]                      
+      256 +pub enum CfCond {                                             
+      257 +    Gt, Lt, Gte, Lte, Eq, Neq, Between, Contains, Blanks, NonB
+          +lanks,                                                        
+      258 +}                                                             
+      259 +                                                              
+      260 +impl CfCond {                                                 
+      261 +    pub fn label(&self) -> &str {                             
+      262 +        match self {                                          
+      263 +            CfCond::Gt => "> Greater",                        
+      264 +            CfCond::Lt => "< Less",                           
+      265 +            CfCond::Gte => ">= Gr/Equal",                     
+      266 +            CfCond::Lte => "<= Le/Equal",                     
+      267 +            CfCond::Eq => "= Equal",                          
+      268 +            CfCond::Neq => "!= Not Equal",                    
+      269 +            CfCond::Between => "Between A B",                 
+      270 +            CfCond::Contains => "Contains",                   
+      271 +            CfCond::Blanks => "Blanks",                       
+      272 +            CfCond::NonBlanks => "Non-Blanks",                
+      273 +        }                                                     
+      274 +    }                                                         
+      275 +    pub fn all() -> &'static [CfCond] {                       
+      276 +        &[CfCond::Gt, CfCond::Lt, CfCond::Gte, CfCond::Lte, Cf
+          +Cond::Eq, CfCond::Neq,                                        
+      277 +          CfCond::Between, CfCond::Contains, CfCond::Blanks, C
+          +fCond::NonBlanks]                                             
+      278 +    }                                                         
+      279 +    pub fn needs_value(&self) -> bool {                       
+      280 +        !matches!(self, CfCond::Blanks | CfCond::NonBlanks)   
+      281 +    }                                                         
+      282 +    pub fn needs_two(&self) -> bool {                         
+      283 +        matches!(self, CfCond::Between)                       
+      284 +    }                                                         
+      285 +    pub fn text_value(&self) -> bool {                        
+      286 +        matches!(self, CfCond::Contains)                      
+      287 +    }                                                         
+      288 +}                                                             
+      289 +                                                              
+      290 +pub const CF_COLORS: &[&str] = &[                             
+      291 +    "none", "red", "green", "blue", "yellow", "cyan", "magenta
+          +", "orange", "white", "black", "gray",                        
+      292 +];                                                            
+      293 +                                                              
+      294 +#[derive(Debug, Clone, PartialEq)]                            
+      295 +pub enum CfDialogFocus {                                      
+      296 +    Range,                                                    
+      297 +    Cond,                                                     
+      298 +    Val1,                                                     
+      299 +    Val2,                                                     
+      300 +    Bold, Italic, Under, DUnder, Strike, Over,                
+      301 +    Bg, Fg,                                                   
+      302 +    RulesList,                                                
+      303 +    BtnApply,                                                 
+      304 +    BtnBase,                                                  
+      305 +    BtnDelete,                                                
+      306 +    BtnCleanAll,                                              
+      307 +    BtnClose,                                                 
+      308 +}                                                             
+      309 +                                                              
+      310 +impl CfDialogFocus {                                          
+      311 +    pub fn next(&self) -> Self {                              
+      312 +        use CfDialogFocus::*;                                 
+      313 +        match self {                                          
+      314 +            Range => Cond,                                    
+      315 +            Cond => Val1,                                     
+      316 +            Val1 => Val2,                                     
+      317 +            Val2 => Bold,                                     
+      318 +            Bold => Italic,                                   
+      319 +            Italic => Under,                                  
+      320 +            Under => DUnder,                                  
+      321 +            DUnder => Strike,                                 
+      322 +            Strike => Over,                                   
+      323 +            Over => Bg,                                       
+      324 +            Bg => Fg,                                         
+      325 +            Fg => RulesList,                                  
+      326 +            RulesList => BtnApply,                            
+      327 +            BtnApply => BtnBase,                              
+      328 +            BtnBase => BtnDelete,                             
+      329 +            BtnDelete => BtnCleanAll,                         
+      330 +            BtnCleanAll => BtnClose,                          
+      331 +            BtnClose => Range,                                
+      332 +        }                                                     
+      333 +    }                                                         
+      334 +    pub fn prev(&self) -> Self {                              
+      335 +        use CfDialogFocus::*;                                 
+      336 +        match self {                                          
+      337 +            Range => BtnClose,                                
+      338 +            Cond => Range,                                    
+      339 +            Val1 => Cond,                                     
+      340 +            Val2 => Val1,                                     
+      341 +            Bold => Val2,                                     
+      342 +            Italic => Bold,                                   
+      343 +            Under => Italic,                                  
+      344 +            DUnder => Under,                                  
+      345 +            Strike => DUnder,                                 
+      346 +            Over => Strike,                                   
+      347 +            Bg => Over,                                       
+      348 +            Fg => Bg,                                         
+      349 +            RulesList => Fg,                                  
+      350 +            BtnApply => RulesList,                            
+      351 +            BtnBase => BtnApply,                              
+      352 +            BtnDelete => BtnBase,                             
+      353 +            BtnCleanAll => BtnDelete,                         
+      354 +            BtnClose => BtnCleanAll,                          
+      355 +        }                                                     
+      356 +    }                                                         
+      357 +}                                                             
+      358 +                                                              
+      359 +#[derive(Debug, Clone, Copy, PartialEq)]                      
+      360 +pub enum CfDropdown { None, Cond, Bg, Fg }                    
+      361 +                                                              
+      362 +#[derive(Debug, Clone)]                                       
+      363 +pub struct CfDialog {                                         
+      364 +    pub visible: bool,                                        
+      365 +    pub focus: CfDialogFocus,                                 
+      366 +    pub range_text: String,                                   
+      367 +    pub cond: CfCond,                                         
+      368 +    pub val1: String,                                         
+      369 +    pub val2: String,                                         
+      370 +    pub bold: bool,                                           
+      371 +    pub italic: bool,                                         
+      372 +    pub under: bool,                                          
+      373 +    pub dunder: bool,                                         
+      374 +    pub strike: bool,                                         
+      375 +    pub over: bool,                                           
+      376 +    pub bg_idx: usize, // into CF_COLORS (0 = none)           
+      377 +    pub fg_idx: usize,                                        
+      378 +    pub open_dropdown: CfDropdown,                            
+      379 +    pub dropdown_scroll: usize,                               
+      380 +    pub rules_selected: usize,                                
+      381 +    pub rules_scroll: usize,                                  
+      382 +    pub screen_x: u16,                                        
+      383 +    pub screen_y: u16,                                        
+      384 +    pub screen_w: u16,                                        
+      385 +    pub screen_h: u16,                                        
+      386 +    pub dd_item_x: u16,                                       
+      387 +    pub dd_item_y: u16,                                       
+      388 +    pub dd_item_w: u16,                                       
+      389 +    pub dd_item_count: u16,                                   
+      390 +    // Click-area rects filled during render (x, y, w)        
+      391 +    pub rect_range: (u16, u16, u16),                          
+      392 +    pub rect_cond: (u16, u16, u16),                           
+      393 +    pub rect_val1: (u16, u16, u16),                           
+      394 +    pub rect_val2: (u16, u16, u16),                           
+      395 +    pub rect_bold: (u16, u16, u16),                           
+      396 +    pub rect_italic: (u16, u16, u16),                         
+      397 +    pub rect_under: (u16, u16, u16),                          
+      398 +    pub rect_dunder: (u16, u16, u16),                         
+      399 +    pub rect_strike: (u16, u16, u16),                         
+      400 +    pub rect_over: (u16, u16, u16),                           
+      401 +    pub rect_bg: (u16, u16, u16),                             
+      402 +    pub rect_fg: (u16, u16, u16),                             
+      403 +    pub rect_rules: (u16, u16, u16, u16), // x,y,w,h          
+      404 +    pub rect_apply: (u16, u16, u16),                          
+      405 +    pub rect_base: (u16, u16, u16),                           
+      406 +    pub rect_delete: (u16, u16, u16),                         
+      407 +    pub rect_cleanall: (u16, u16, u16),                       
+      408 +    pub rect_close: (u16, u16, u16),                          
+      409 +}                                                             
+      410 +                                                              
+      411  pub struct App {
+      412      pub workbook: Workbook,
+      413      pub cursor: CellAddr,
+
+● Update(crates/xlcli-tui/src/app.rs)
+  ⎿  Added 1 line
+      430      pub formula_origin_sheet: Option<u16>,
+      431      pub sort_dialog: SortDialog,
+      432      pub filter_dialog: FilterDialog,
+      433 +    pub cf_dialog: CfDialog,                                  
+      434  }
+      435  
+      436  pub struct AutocompleteState {
+
+● Update(crates/xlcli-tui/src/app.rs)
+  ⎿  Added 22 lines
+      495                  value_search: String::new(),
+      496                  all_checked: true,
+      497              },
+      498 +            cf_dialog: CfDialog {                             
+      499 +                visible: false,                               
+      500 +                focus: CfDialogFocus::Range,                  
+      501 +                range_text: String::new(),                    
+      502 +                cond: CfCond::Gt,                             
+      503 +                val1: String::new(),                          
+      504 +                val2: String::new(),                          
+      505 +                bold: false, italic: false, under: false, dund
+          +er: false, strike: false, over: false,                        
+      506 +                bg_idx: 0, fg_idx: 0,                         
+      507 +                open_dropdown: CfDropdown::None,              
+      508 +                dropdown_scroll: 0,                           
+      509 +                rules_selected: 0,                            
+      510 +                rules_scroll: 0,                              
+      511 +                screen_x: 0, screen_y: 0, screen_w: 56, screen
+          +_h: 24,                                                       
+      512 +                dd_item_x: 0, dd_item_y: 0, dd_item_w: 0, dd_i
+          +tem_count: 0,                                                 
+      513 +                rect_range: (0,0,0), rect_cond: (0,0,0), rect_
+          +val1: (0,0,0), rect_val2: (0,0,0),                            
+      514 +                rect_bold: (0,0,0), rect_italic: (0,0,0), rect
+          +_under: (0,0,0),                                              
+      515 +                rect_dunder: (0,0,0), rect_strike: (0,0,0), re
+          +ct_over: (0,0,0),                                             
+      516 +                rect_bg: (0,0,0), rect_fg: (0,0,0), rect_rules
+          +: (0,0,0,0),                                                  
+      517 +                rect_apply: (0,0,0), rect_base: (0,0,0), rect_
+          +delete: (0,0,0),                                              
+      518 +                rect_cleanall: (0,0,0), rect_close: (0,0,0),  
+      519 +            },                                                
+      520          };
+      521          app.build_dep_graph();
+      522          app.recalc_all();
+● Now open_cf_dialog + confirm methods. Replace the :cf alone handler:
+
+● Update(crates/xlcli-tui/src/app.rs)
+  ⎿  Added 2 lines, removed 3 lines
+      1725              self.list_named_ranges();
+      1726          } else if let Some(rest) = cmd.strip_prefix("name ") 
+            {
+      1727              self.handle_name_command(rest.trim());
+      1728 -        } else if cmd == "cf" {                              
+      1729 -            // TODO Phase B: open dialog                     
+      1730 -            self.status_message = Some("Dialog not yet. Use :
+           -cf <cond> <style>".to_string());                             
+      1728 +        } else if cmd == "cf" || cmd == "cf list" {          
+      1729 +            self.open_cf_dialog();                           
+      1730          } else if let Some(rest) = cmd.strip_prefix("cf ") {
+      1731              self.handle_cf_command(rest.trim());
+      1732          } else if let Some(rest) = cmd.strip_prefix("case ") 
+            {
+
+● Add open method + confirm helpers near handle_cf_command.
+
+● Update(crates/xlcli-tui/src/app.rs)
+  ⎿  Added 139 lines
+      1829          self.status_message = Some(format!("Named: {}", name)
+            );
+      1830      }
+      1831  
+      1832 +    pub fn open_cf_dialog(&mut self) {                       
+      1833 +        let range_text = if let Some(anchor) = self.visual_an
+           +chor {                                                       
+      1834 +            let r1 = anchor.row.min(self.cursor.row);        
+      1835 +            let r2 = anchor.row.max(self.cursor.row);        
+      1836 +            let c1 = anchor.col.min(self.cursor.col);        
+      1837 +            let c2 = anchor.col.max(self.cursor.col);        
+      1838 +            format!("{}{}:{}{}",                             
+      1839 +                CellAddr::col_name(c1), r1 + 1,              
+      1840 +                CellAddr::col_name(c2), r2 + 1)              
+      1841 +        } else {                                             
+      1842 +            String::new()                                    
+      1843 +        };                                                   
+      1844 +        self.cf_dialog = CfDialog {                          
+      1845 +            visible: true,                                   
+      1846 +            focus: CfDialogFocus::Range,                     
+      1847 +            range_text,                                      
+      1848 +            cond: CfCond::Gt,                                
+      1849 +            val1: String::new(),                             
+      1850 +            val2: String::new(),                             
+      1851 +            bold: false, italic: false, under: false, dunder:
+           + false, strike: false, over: false,                          
+      1852 +            bg_idx: 0, fg_idx: 0,                            
+      1853 +            open_dropdown: CfDropdown::None,                 
+      1854 +            dropdown_scroll: 0,                              
+      1855 +            rules_selected: 0,                               
+      1856 +            rules_scroll: 0,                                 
+      1857 +            screen_x: 0, screen_y: 0, screen_w: 58, screen_h:
+           + 24,                                                         
+      1858 +            dd_item_x: 0, dd_item_y: 0, dd_item_w: 0, dd_item
+           +_count: 0,                                                   
+      1859 +            rect_range: (0,0,0), rect_cond: (0,0,0), rect_val
+           +1: (0,0,0), rect_val2: (0,0,0),                              
+      1860 +            rect_bold: (0,0,0), rect_italic: (0,0,0), rect_un
+           +der: (0,0,0),                                                
+      1861 +            rect_dunder: (0,0,0), rect_strike: (0,0,0), rect_
+           +over: (0,0,0),                                               
+      1862 +            rect_bg: (0,0,0), rect_fg: (0,0,0), rect_rules: (
+           +0,0,0,0),                                                    
+      1863 +            rect_apply: (0,0,0), rect_base: (0,0,0), rect_del
+           +ete: (0,0,0),                                                
+      1864 +            rect_cleanall: (0,0,0), rect_close: (0,0,0),     
+      1865 +        };                                                   
+      1866 +        self.visual_anchor = None;                           
+      1867 +    }                                                        
+      1868 +                                                             
+      1869 +    fn cf_dialog_build_overlay(&self) -> xlcli_core::condfmt:
+           +:StyleOverlay {                                              
+      1870 +        let d = &self.cf_dialog;                             
+      1871 +        let mut o = xlcli_core::condfmt::StyleOverlay::defaul
+           +t();                                                         
+      1872 +        if d.bold { o.bold = Some(true); }                   
+      1873 +        if d.italic { o.italic = Some(true); }               
+      1874 +        if d.under { o.underline = Some(true); }             
+      1875 +        if d.dunder { o.double_underline = Some(true); }     
+      1876 +        if d.strike { o.strikethrough = Some(true); }        
+      1877 +        if d.over { o.overline = Some(true); }               
+      1878 +        if d.bg_idx > 0 {                                    
+      1879 +            if let Ok(c) = color_by_name(CF_COLORS[d.bg_idx])
+           + { o.bg_color = Some(c); }                                   
+      1880 +        }                                                    
+      1881 +        if d.fg_idx > 0 {                                    
+      1882 +            if let Ok(c) = color_by_name(CF_COLORS[d.fg_idx])
+           + { o.fg_color = Some(c); }                                   
+      1883 +        }                                                    
+      1884 +        o                                                    
+      1885 +    }                                                        
+      1886 +                                                             
+      1887 +    fn cf_dialog_build_cond(&self) -> Result<xlcli_core::cond
+           +fmt::Condition, String> {                                    
+      1888 +        use xlcli_core::condfmt::Condition;                  
+      1889 +        let d = &self.cf_dialog;                             
+      1890 +        match d.cond {                                       
+      1891 +            CfCond::Blanks => Ok(Condition::Blanks),         
+      1892 +            CfCond::NonBlanks => Ok(Condition::NonBlanks),   
+      1893 +            CfCond::Contains => {                            
+      1894 +                if d.val1.is_empty() { return Err("Value requ
+           +ired".into()); }                                             
+      1895 +                Ok(Condition::Contains(d.val1.clone()))      
+      1896 +            }                                                
+      1897 +            CfCond::Between => {                             
+      1898 +                let a: f64 = d.val1.parse().map_err(|_| "Val1
+           + not a number".to_string())?;                                
+      1899 +                let b: f64 = d.val2.parse().map_err(|_| "Val2
+           + not a number".to_string())?;                                
+      1900 +                Ok(Condition::Between(a, b))                 
+      1901 +            }                                                
+      1902 +            other => {                                       
+      1903 +                let n: f64 = d.val1.parse().map_err(|_| "Val1
+           + not a number".to_string())?;                                
+      1904 +                Ok(match other {                             
+      1905 +                    CfCond::Gt => Condition::Gt(n),          
+      1906 +                    CfCond::Lt => Condition::Lt(n),          
+      1907 +                    CfCond::Gte => Condition::Gte(n),        
+      1908 +                    CfCond::Lte => Condition::Lte(n),        
+      1909 +                    CfCond::Eq => Condition::Eq(n),          
+      1910 +                    CfCond::Neq => Condition::Neq(n),        
+      1911 +                    _ => unreachable!(),                     
+      1912 +                })                                           
+      1913 +            }                                                
+      1914 +        }                                                    
+      1915 +    }                                                        
+      1916 +                                                             
+      1917 +    pub fn cf_dialog_apply(&mut self) {                      
+      1918 +        let sheet_idx = self.workbook.active_sheet as u16;   
+      1919 +        let range = match parse_range_arg(&self.cf_dialog.ran
+           +ge_text, sheet_idx) {                                        
+      1920 +            Some(r) => r,                                    
+      1921 +            None => {                                        
+      1922 +                self.status_message = Some("Invalid range".to
+           +_string());                                                  
+      1923 +                return;                                      
+      1924 +            }                                                
+      1925 +        };                                                   
+      1926 +        let cond = match self.cf_dialog_build_cond() {       
+      1927 +            Ok(c) => c,                                      
+      1928 +            Err(e) => { self.status_message = Some(e); return
+           +; }                                                          
+      1929 +        };                                                   
+      1930 +        let overlay = self.cf_dialog_build_overlay();        
+      1931 +        if overlay.is_empty() {                              
+      1932 +            self.status_message = Some("No style selected".to
+           +_string());                                                  
+      1933 +            return;                                          
+      1934 +        }                                                    
+      1935 +        self.workbook.active_sheet_mut().cond_rules.push(xlcl
+           +i_core::condfmt::CondRule {                                  
+      1936 +            range, cond, style: overlay,                     
+      1937 +        });                                                  
+      1938 +        self.status_message = Some("Rule added".to_string());
+      1939 +    }                                                        
+      1940 +                                                             
+      1941 +    pub fn cf_dialog_set_base(&mut self) {                   
+      1942 +        let overlay = self.cf_dialog_build_overlay();        
+      1943 +        if overlay.is_empty() {                              
+      1944 +            self.status_message = Some("No style selected".to
+           +_string());                                                  
+      1945 +            return;                                          
+      1946 +        }                                                    
+      1947 +        self.workbook.active_sheet_mut().base_style = overlay
+           +;                                                            
+      1948 +        self.status_message = Some("Base style set".to_string
+           +());                                                         
+      1949 +    }                                                        
+      1950 +                                                             
+      1951 +    pub fn cf_dialog_delete_selected(&mut self) {            
+      1952 +        let idx = self.cf_dialog.rules_selected;             
+      1953 +        let sheet = self.workbook.active_sheet_mut();        
+      1954 +        if idx < sheet.cond_rules.len() {                    
+      1955 +            sheet.cond_rules.remove(idx);                    
+      1956 +            if self.cf_dialog.rules_selected >= sheet.cond_ru
+           +les.len()                                                    
+      1957 +                && self.cf_dialog.rules_selected > 0 {       
+      1958 +                self.cf_dialog.rules_selected -= 1;          
+      1959 +            }                                                
+      1960 +            self.status_message = Some("Rule deleted".to_stri
+           +ng());                                                       
+      1961 +        }                                                    
+      1962 +    }                                                        
+      1963 +                                                             
+      1964 +    pub fn cf_dialog_clean_all(&mut self) {                  
+      1965 +        let sheet = self.workbook.active_sheet_mut();        
+      1966 +        sheet.cond_rules.clear();                            
+      1967 +        sheet.base_style = xlcli_core::condfmt::StyleOverlay:
+           +:default();                                                  
+      1968 +        self.status_message = Some("All rules cleared".to_str
+           +ing());                                                      
+      1969 +    }                                                        
+      1970 +                                                             
+      1971      fn handle_cf_command(&mut self, rest: &str) {
+      1972          // :cf list
+      1973          if rest == "list" { self.cf_list(); return; }
+
+● Bash(cargo build 2>&1 | tail -20)
+  ⎿  1941 |     pub fn cf_dialog_set_base(&mut self) {
+          |            ^^^^^^^^^^^^^^^^^^
+     ...
+     … +18 lines (ctrl+o to expand)
+
+● Builds (warnings = unused until input handler wired). Now input handler.
+
+  Input handler
+
+● Update(crates/xlcli-tui/src/input.rs)
+  ⎿  Added 1 line, removed 1 line
+      2  
+      3  use xlcli_core::types::CellAddr;
+      4  
+      5 -use crate::app::{App, FilterDialogFocus, FilterDropdown, FilterT
+        -ype, SortDialogFocus, SortDropdown, SortType};                  
+      5 +use crate::app::{App, CF_COLORS, CfCond, CfDialogFocus, CfDropdo
+        +wn, FilterDialogFocus, FilterDropdown, FilterType, SortDialogFoc
+        +us, SortDropdown, SortType};                                    
+      6  use crate::mode::Mode;
+      7  
+      8  pub fn handle_event(app: &mut App, event: Event) {
+
+● Update(crates/xlcli-tui/src/input.rs)
+  ⎿  Added 13 lines
+      32          return;
+      33      }
+      34  
+      35 +    if app.cf_dialog.visible {                                 
+      36 +        match event {                                          
+      37 +            Event::Key(key) => handle_cf_dialog(app, key),     
+      38 +            Event::Mouse(mouse) => {                           
+      39 +                if let MouseEventKind::Down(MouseButton::Left) 
+         += mouse.kind {                                                 
+      40 +                    handle_cf_dialog_mouse(app, mouse.column, m
+         +ouse.row);                                                     
+      41 +                }                                              
+      42 +            }                                                  
+      43 +            _ => {}                                            
+      44 +        }                                                      
+      45 +        return;                                                
+      46 +    }                                                          
+      47 +                                                               
+      48      match event {
+      49          Event::Key(key) => match &app.mode {
+      50              Mode::Normal => handle_normal(app, key),
+
+  Read 1 file (ctrl+o to expand)
+
+● Bash(cargo build 2>&1 | tail -40)
+  ⎿      |
+         = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by def
+     ault
+     … +27 lines (ctrl+o to expand)
+
+● Builds. Input handler wired. Now render.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(crates/xlcli-tui/src/render.rs)
+  ⎿  Added 4 lines
+      53      if app.filter_dialog.visible {
+      54          render_filter_dialog(frame, app, size);
+      55      }
+      56 +                                                               
+      57 +    if app.cf_dialog.visible {                                 
+      58 +        render_cf_dialog(frame, app, size);                    
+      59 +    }                                                          
+      60  }
+      61  
+      62  fn render_formula_bar(frame: &mut Frame, app: &App, area: Rect)
+           {
+
+● Now render_cf_dialog function. Look at filter dialog render for pattern:
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Update(crates/xlcli-tui/src/render.rs)
+  ⎿  Added 1 line, removed 1 line
+       6  
+       7  use xlcli_core::types::CellAddr;
+       8  
+       9 -use crate::app::{App, FilterDialogFocus, FilterDropdown, Filter
+         -Type, SortDialogFocus, SortDropdown, SortType};                
+       9 +use crate::app::{App, CF_COLORS, CfCond, CfDialogFocus, CfDropd
+         +own, FilterDialogFocus, FilterDropdown, FilterType, SortDialogF
+         +ocus, SortDropdown, SortType};                                 
+      10  use crate::mode::Mode;
+      11  
+      12  pub fn render(frame: &mut Frame, app: &mut App) {
+
+  Read 1 file (ctrl+o to expand)
+
+● Bash(cargo build 2>&1 | tail -30)
+  ⎿      |            ^^^^^^^^^^^
+     ...
+     282 |     pub fn needs_two(&self) -> bool {
+     … +28 lines (ctrl+o to expand)
+
+● Build clean. Dialog complete.
+
+  Test
+
+  :cf      # opens popup
+
+  Navigation:
+  - Tab/Shift-Tab or j/k: cycle focus
+  - Space/Enter: toggle checkbox / open dropdown / press button
+  - h/l or ←/→: prev/next on Cond/Bg/Fg (without opening dropdown)
+  - Esc: close dialog (or close dropdown)
+  - Mouse: click any field/button/checkbox; click dropdown opens it
+
+  Fields:
+  - Range (prefilled from visual selection if was active)
+  - Cond dropdown + Val1/Val2 inputs (Val2 only for between)
+  - 6 style checkboxes: Bold, Italic, Under, DUnder, Strike, Over
+  - BG/FG color dropdowns
+  - Rules list (shows existing + base indicator)
+  - Buttons: Apply / SetBase / Delete (removes selected rule) / CleanAll / Close
+
+  Report issues. Command-line :cf <args> still works as fallback.
+
+✻ Crunched for 14m 50s
+
+❯ I dont have to get a value always, so make it a toggle and if i select the    
+  toggle, make the values appear. Also, dont make the Values fields trap        
+  keyboard and go into insert mode in vim if i dont press enter or i            
+  ⎿  You're out of extra usage · resets 10pm (Europe/Madrid)
+     /upgrade to increase your usage limit.
+
+❯ /model                                                                        
+  ⎿  Set model to Sonnet 4.6 (default)
+
+❯ Looks where at we and save everything in a .md file so i can continue the     
+  next session                                                                  
+  ⎿  You're out of extra usage · resets 10pm (Europe/Madrid)
+     /upgrade to increase your usage limit.
+
+❯ /usage 
+  ⎿  Status dialog dismissed

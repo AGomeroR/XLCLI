@@ -1,6 +1,23 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::cell::{Cell, CellValue};
+use crate::condfmt::{CondRule, StyleOverlay};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FilterCondition {
+    Eq(String),
+    NotEq(String),
+    Gt(f64),
+    Lt(f64),
+    Gte(f64),
+    Lte(f64),
+    Contains(String),
+    Blanks,
+    NonBlanks,
+    TopN(usize),
+    BottomN(usize),
+    ValueSet(HashSet<String>),
+}
 
 #[derive(Debug)]
 pub struct Sheet {
@@ -12,6 +29,11 @@ pub struct Sheet {
     pub freeze: Option<(u32, u16)>,
     pub hidden_rows: HashSet<u32>,
     pub hidden_cols: HashSet<u16>,
+    pub header_row: Option<u32>,
+    pub filters: HashMap<u16, FilterCondition>,
+    pub filter_range: Option<(u32, u32, u16, u16)>,
+    pub base_style: StyleOverlay,
+    pub cond_rules: Vec<CondRule>,
 }
 
 impl Sheet {
@@ -25,7 +47,25 @@ impl Sheet {
             freeze: None,
             hidden_rows: HashSet::new(),
             hidden_cols: HashSet::new(),
+            header_row: None,
+            filters: HashMap::new(),
+            filter_range: None,
+            base_style: StyleOverlay::default(),
+            cond_rules: Vec::new(),
         }
+    }
+
+    pub fn effective_style(&self, row: u32, col: u16, base: &crate::style::CellStyle) -> crate::style::CellStyle {
+        let mut s = base.clone();
+        self.base_style.apply(&mut s);
+        let addr = crate::types::CellAddr::new(0, row, col);
+        let val = self.get_cell_value(row, col);
+        for rule in &self.cond_rules {
+            if rule.applies_to(&addr) && rule.cond.matches(val) {
+                rule.style.apply(&mut s);
+            }
+        }
+        s
     }
 
     pub fn get_cell(&self, row: u32, col: u16) -> Option<&Cell> {
@@ -140,6 +180,77 @@ impl Sheet {
         }
         self.cells = new_cells;
         self.extent.1 += 1;
+    }
+
+    pub fn apply_filters(&mut self) {
+        self.hidden_rows.clear();
+        if self.filters.is_empty() {
+            return;
+        }
+        let (min_row, max_row, _min_col, _max_col) = match self.filter_range {
+            Some(r) => r,
+            None => return,
+        };
+        let header = self.header_row;
+        let start_row = if let Some(h) = header {
+            if h >= min_row && h <= max_row { h + 1 } else { min_row }
+        } else {
+            min_row
+        };
+
+        // For TopN/BottomN, precompute sorted values per column
+        let mut top_bottom_sets: HashMap<u16, HashSet<u32>> = HashMap::new();
+        for (col, cond) in &self.filters {
+            match cond {
+                FilterCondition::TopN(n) | FilterCondition::BottomN(n) => {
+                    let mut vals: Vec<(u32, f64)> = (start_row..=max_row)
+                        .filter_map(|r| {
+                            self.get_cell_value(r, *col).as_f64().map(|v| (r, v))
+                        })
+                        .collect();
+                    match cond {
+                        FilterCondition::TopN(_) => vals.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)),
+                        FilterCondition::BottomN(_) => vals.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)),
+                        _ => unreachable!(),
+                    }
+                    let keep: HashSet<u32> = vals.iter().take(*n).map(|(r, _)| *r).collect();
+                    top_bottom_sets.insert(*col, keep);
+                }
+                _ => {}
+            }
+        }
+
+        for row in start_row..=max_row {
+            let mut visible = true;
+            for (col, cond) in &self.filters {
+                let val = self.get_cell_value(row, *col);
+                let pass = match cond {
+                    FilterCondition::Eq(s) => val.display_value().eq_ignore_ascii_case(s),
+                    FilterCondition::NotEq(s) => !val.display_value().eq_ignore_ascii_case(s),
+                    FilterCondition::Gt(n) => val.as_f64().map_or(false, |v| v > *n),
+                    FilterCondition::Lt(n) => val.as_f64().map_or(false, |v| v < *n),
+                    FilterCondition::Gte(n) => val.as_f64().map_or(false, |v| v >= *n),
+                    FilterCondition::Lte(n) => val.as_f64().map_or(false, |v| v <= *n),
+                    FilterCondition::Contains(s) => val.display_value().to_lowercase().contains(&s.to_lowercase()),
+                    FilterCondition::Blanks => val.is_empty(),
+                    FilterCondition::NonBlanks => !val.is_empty(),
+                    FilterCondition::TopN(_) | FilterCondition::BottomN(_) => {
+                        top_bottom_sets.get(col).map_or(false, |set| set.contains(&row))
+                    }
+                    FilterCondition::ValueSet(set) => {
+                        let dv = val.display_value();
+                        set.contains(&dv) || (val.is_empty() && set.contains(""))
+                    }
+                };
+                if !pass {
+                    visible = false;
+                    break;
+                }
+            }
+            if !visible {
+                self.hidden_rows.insert(row);
+            }
+        }
     }
 
     pub fn delete_col(&mut self, at_col: u16) -> Vec<(u32, Cell)> {

@@ -1,4 +1,5 @@
 pub mod cell;
+pub mod condfmt;
 pub mod dep_graph;
 pub mod error;
 pub mod range;

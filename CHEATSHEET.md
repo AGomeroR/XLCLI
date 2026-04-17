@@ -71,9 +71,9 @@ xlcli has 4 modes, like Vim:
 | Key              | Action                                              |
 |------------------|-----------------------------------------------------|
 | `t`              | New sheet — opens command box to set name            |
-| `Alt+1`–`Alt+9`  | Switch to sheet 1–9 (Normal, Visual, Insert+formula)|
+| `Ctrl+1`–`Ctrl+9`| Switch to sheet 1–9 (Normal, Visual, Insert+formula)|
 
-During formula editing (`=`), `Alt+1`–`Alt+9` switches the view for cross-sheet ref browsing.
+During formula editing (`=`), `Ctrl+1`–`Ctrl+9` switches the view for cross-sheet ref browsing.
 Click a cell on the other sheet to insert `Sheet2!A1` style references.
 On confirm/cancel, returns to the formula's origin sheet.
 
@@ -83,6 +83,7 @@ On confirm/cancel, returns to the formula's origin sheet.
 |-----|--------------------------------------|
 | `v` | Enter Visual selection mode          |
 | `:` | Enter Command mode                   |
+| `Shift+Enter` | Open filter dialog (on header row) |
 | `q` | Quit (if no unsaved changes)         |
 
 ---
@@ -175,6 +176,123 @@ Press `:` to open the command palette (or inline status bar, depending on config
 | `:sheet move right`      | Move current sheet one position right       |
 | `:sheet move 2`          | Move current sheet to position 2            |
 | `:sheet move 1 3`        | Move sheet 1 to position 3                  |
+
+### Sort
+
+| Command                   | Action                                      |
+|---------------------------|---------------------------------------------|
+| `:sort`                   | Open sort dialog (popup)                    |
+| `:sort B`                 | Sort by column B, A-Z                       |
+| `:sort B desc`            | Sort by column B, Z-A                       |
+| `:sort B num`             | Sort by column B, numeric ascending         |
+| `:sort B numdesc`         | Sort by column B, numeric descending        |
+| `:sort B case`            | Sort by column B, case-sensitive            |
+| `:sort B natural`         | Sort by column B, natural order             |
+| `:sort B desc A`          | Sort by B descending, then A ascending      |
+| `:sort B A num`           | Sort by B (A-Z), then A (numeric)           |
+
+In Visual mode, sort applies to selected range. Without selection, sorts entire sheet (configurable via `sort.allow_full_sheet` in config).
+
+Sort dialog (`:sort` with no args): navigate with `Tab`/`Shift+Tab`, change values with `Left`/`Right` (`h`/`l`), toggle headers with `Space`/`Enter`, confirm with `Sort` button.
+
+### Freeze Panes
+
+| Command              | Action                                      |
+|----------------------|---------------------------------------------|
+| `:freeze 1`           | Freeze first row only                      |
+| `:freeze 1 A`         | Freeze first row and column A              |
+| `:freeze 1-3`         | Freeze rows 1-3 only                       |
+| `:freeze 1-3 B-C`     | Freeze rows 1-3 and columns B-C            |
+| `:unfreeze`            | Remove all freeze panes                    |
+
+A border line separates frozen and scrollable regions. Frozen rows/columns stay visible while scrolling.
+
+### Table Headers
+
+| Command              | Action                                      |
+|----------------------|---------------------------------------------|
+| `:headers`           | Set row 1 as header (or visual selection row if active) |
+| `:headers 1`         | Set row 1 as header row                     |
+| `:unheaders`         | Remove header row                           |
+
+### Named Ranges
+
+| Command                     | Action                                      |
+|-----------------------------|---------------------------------------------|
+| `:name MyRange A1:B10`      | Define named range `MyRange` = A1:B10       |
+| `:name Total B5`            | Define single-cell name `Total` = B5        |
+| `:name MyRange` (visual)    | Name the current visual selection           |
+| `:name delete MyRange`      | Delete named range                          |
+| `:names`                    | List all named ranges                       |
+
+Use names directly in formulas: `=SUM(MyRange)`, `=Total*2`.
+
+### Conditional Formatting
+
+Rules match a **condition** against cell value, then apply a **style overlay**.
+
+| Command                                      | Action                                      |
+|----------------------------------------------|---------------------------------------------|
+| `:cf gt 100 bg=red`                          | Visual selection: red bg when cell > 100    |
+| `:cf A1:B10 lt 0 fg=red bold`                | Explicit range                              |
+| `:cf contains foo italic`                    | Rule on visual selection, italic if contains "foo" |
+| `:cf between 0 10 bg=green`                  |                                             |
+| `:cf blanks bg=gray`                         |                                             |
+| `:cf base bold fg=white`                     | Sheet-wide base style                       |
+| `:cf clean` (visual)                         | Remove rules overlapping selection          |
+| `:cf clean A1:B5`                            | Remove rules overlapping range              |
+| `:cf clean all`                              | Remove all rules + base                     |
+| `:cf list`                                   | List rules                                  |
+
+**Conditions**: `gt N`, `lt N`, `gte N`, `lte N`, `eq N`, `neq N`, `between A B`, `contains TEXT`, `blanks`, `nonblanks`.
+
+**Style tokens**: `bold`, `italic`, `under`, `dunder`, `strike`, `over`, `bg=<color>`, `fg=<color>`. Negate with `!` (e.g., `!bold`).
+
+**Colors**: `red green blue yellow cyan magenta orange white black gray none`.
+
+### Text Case
+
+| Command              | Action                                      |
+|----------------------|---------------------------------------------|
+| `:case upper`        | UPPERCASE visual selection (or cursor cell) |
+| `:case lower`        | lowercase                                   |
+| `:case title`        | Title Case                                  |
+| `:case sentence`     | Sentence case                               |
+| `:case toggle`       | tOGGLE cASE                                 |
+
+Header row displays bold with background highlight. Sort automatically skips header row. Clicking or pressing `Shift+Enter` on a header cell opens the filter dialog.
+
+### AutoFilter
+
+| Command                  | Action                                          |
+|--------------------------|------------------------------------------------|
+| `:filter`                | Open filter dialog (visual selection or sheet)  |
+| `:filter all`            | Open filter dialog for entire sheet             |
+| `:filter B = hello`      | Filter column B: exact match "hello"           |
+| `:filter B != test`      | Filter column B: not equal "test"              |
+| `:filter C > 100`        | Filter column C: greater than 100              |
+| `:filter C < 50`         | Filter column C: less than 50                  |
+| `:filter C >= 10`        | Filter column C: greater or equal 10           |
+| `:filter C <= 99`        | Filter column C: less or equal 99              |
+| `:filter B contains abc` | Filter column B: contains substring "abc"      |
+| `:filter B blanks`       | Filter column B: show only blank cells         |
+| `:filter B nonblanks`    | Filter column B: show only non-blank cells     |
+| `:filter B top 10`       | Filter column B: top 10 numeric values         |
+| `:filter B bottom 5`     | Filter column B: bottom 5 numeric values       |
+| `:unfilter`              | Remove filters for visual selection columns    |
+| `:unfilter all`          | Remove all filters                             |
+| `:unfilter B`            | Remove filter on column B only                 |
+
+Filters stack across columns (AND logic). Row numbers are preserved (like Excel). Column headers show `▼` indicator when filtered.
+
+**Opening filter dialog:**
+- `:filter` with no column argument
+- `Shift+Enter` on a header cell (Normal mode)
+- Mouse click on a header cell
+
+**Filter dialog (Equals type):** Shows multi-select checkbox list of all unique column values. `(All)` at top toggles all on/off. `Space`/`Enter` toggles individual items. Type to search/filter the list. `Up`/`Down` navigates. `Tab` moves between fields. `Apply` confirms.
+
+**Filter dialog (other types):** Type value in text field, confirm with `Apply` button. Navigate with `Tab`/`Shift+Tab`, change dropdowns with `Left`/`Right` (`h`/`l`).
 
 ### Column Operations
 

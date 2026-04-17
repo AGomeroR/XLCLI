@@ -30,6 +30,7 @@ pub enum Expr {
         name: String,
         args: Vec<Expr>,
     },
+    NamedRef(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

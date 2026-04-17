@@ -1,12 +1,5 @@
 use logos::Logos;
 
-fn check_func_name<'src>(lex: &mut logos::Lexer<'src, Token<'src>>) -> logos::FilterResult<&'src str, ()> {
-    if lex.remainder().starts_with('(') {
-        logos::FilterResult::Emit(lex.slice())
-    } else {
-        logos::FilterResult::Error(())
-    }
-}
 
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ \t]+")]
@@ -20,8 +13,8 @@ pub enum Token<'src> {
     #[regex(r"(?i)(TRUE|FALSE)")]
     Boolean(&'src str),
 
-    #[regex(r"[A-Za-z_][A-Za-z0-9_.]*", check_func_name)]
-    FuncName(&'src str),
+    #[regex(r"[A-Za-z_][A-Za-z0-9_.]*")]
+    Ident(&'src str),
 
     #[regex(r"'[^']+'\!\$?[A-Za-z]{1,3}\$?[0-9]+")]
     SheetRefQuoted(&'src str),

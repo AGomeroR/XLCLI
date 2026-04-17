@@ -57,6 +57,8 @@ where
                 collect_refs(arg, default_sheet, resolver, refs);
             }
         }
+        // NamedRef deps can't be resolved without workbook context — skip for now
+        Expr::NamedRef(_) => {}
         Expr::Number(_) | Expr::String(_) | Expr::Boolean(_) | Expr::Error(_) => {}
     }
 }
