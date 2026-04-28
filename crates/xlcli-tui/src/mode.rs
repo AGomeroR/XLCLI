@@ -4,6 +4,7 @@ pub enum Mode {
     Insert,
     Visual,
     Command,
+    Search,
 }
 
 impl Mode {
@@ -13,6 +14,7 @@ impl Mode {
             Mode::Insert => "INSERT",
             Mode::Visual => "VISUAL",
             Mode::Command => "COMMAND",
+            Mode::Search => "SEARCH",
         }
     }
 }

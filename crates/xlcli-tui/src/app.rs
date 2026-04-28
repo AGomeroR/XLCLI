@@ -276,15 +276,6 @@ impl CfCond {
         &[CfCond::Gt, CfCond::Lt, CfCond::Gte, CfCond::Lte, CfCond::Eq, CfCond::Neq,
           CfCond::Between, CfCond::Contains, CfCond::Blanks, CfCond::NonBlanks]
     }
-    pub fn needs_value(&self) -> bool {
-        !matches!(self, CfCond::Blanks | CfCond::NonBlanks)
-    }
-    pub fn needs_two(&self) -> bool {
-        matches!(self, CfCond::Between)
-    }
-    pub fn text_value(&self) -> bool {
-        matches!(self, CfCond::Contains)
-    }
 }
 
 pub const CF_COLORS: &[&str] = &[
@@ -458,6 +449,10 @@ pub struct App {
     pub cf_dialog: CfDialog,
     pub cf_list: CfListDialog,
     pub formula_error: Option<xlcli_formulas::ParseError>,
+    pub search_buffer: String,
+    pub search_results: Vec<(u32, u16)>,
+    pub search_idx: usize,
+    pub search_active: bool,
 }
 
 impl App {
@@ -571,6 +566,10 @@ impl App {
             },
             cf_list: CfListDialog::default(),
             formula_error: None,
+            search_buffer: String::new(),
+            search_results: Vec::new(),
+            search_idx: 0,
+            search_active: false,
         };
         app.build_dep_graph();
         app.recalc_all();
@@ -611,6 +610,91 @@ impl App {
     pub fn jump_to_col_end(&mut self) {
         let max_col = self.workbook.active_sheet().col_count().saturating_sub(1);
         self.cursor.col = max_col;
+    }
+
+    // --- Search ---
+
+    pub fn enter_search(&mut self) {
+        self.mode = Mode::Search;
+        self.search_buffer.clear();
+    }
+
+    pub fn execute_search(&mut self) {
+        let q = self.search_buffer.to_lowercase();
+        self.search_results.clear();
+        self.search_idx = 0;
+        if q.is_empty() {
+            self.search_active = false;
+            self.mode = Mode::Normal;
+            return;
+        }
+        let sheet = self.workbook.active_sheet();
+        let mut hits: Vec<(u32, u16)> = sheet
+            .cells_iter()
+            .filter_map(|(&(r, c), cell)| {
+                let s = cell.value.display_value();
+                if !s.is_empty() && s.to_lowercase().contains(&q) {
+                    Some((r, c))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        hits.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+        self.search_results = hits;
+        self.mode = Mode::Normal;
+        if self.search_results.is_empty() {
+            self.search_active = false;
+            self.status_message = Some(format!("Pattern not found: {}", self.search_buffer));
+            return;
+        }
+        self.search_active = true;
+        let cur = (self.cursor.row, self.cursor.col);
+        self.search_idx = self
+            .search_results
+            .iter()
+            .position(|p| *p >= cur)
+            .unwrap_or(0);
+        self.jump_to_search_match();
+    }
+
+    pub fn search_next(&mut self) {
+        if !self.search_active || self.search_results.is_empty() {
+            return;
+        }
+        self.search_idx = (self.search_idx + 1) % self.search_results.len();
+        self.jump_to_search_match();
+    }
+
+    pub fn search_prev(&mut self) {
+        if !self.search_active || self.search_results.is_empty() {
+            return;
+        }
+        self.search_idx = if self.search_idx == 0 {
+            self.search_results.len() - 1
+        } else {
+            self.search_idx - 1
+        };
+        self.jump_to_search_match();
+    }
+
+    fn jump_to_search_match(&mut self) {
+        if let Some((r, c)) = self.search_results.get(self.search_idx).copied() {
+            self.cursor.row = r;
+            self.cursor.col = c;
+            self.status_message = Some(format!(
+                "/{}  [{}/{}]",
+                self.search_buffer,
+                self.search_idx + 1,
+                self.search_results.len()
+            ));
+        }
+    }
+
+    pub fn clear_search(&mut self) {
+        self.search_active = false;
+        self.search_results.clear();
+        self.search_buffer.clear();
     }
 
     // --- Editing ---
@@ -1680,12 +1764,6 @@ impl App {
         self.workbook.active_sheet = idx;
         self.restore_sheet_state(idx);
         self.status_message = Some(format!("Ref: {}", self.workbook.sheets[idx].name));
-    }
-
-    pub fn resolve_sheet_name(&self, name: &str) -> Option<u16> {
-        self.workbook.sheets.iter().enumerate()
-            .find(|(_, s)| s.name.eq_ignore_ascii_case(name))
-            .map(|(i, _)| i as u16)
     }
 
     // --- Commands ---
@@ -3062,60 +3140,6 @@ fn color_to_palette_idx(c: Option<xlcli_core::style::Color>) -> usize {
         }
     }
     0
-}
-
-fn overlay_to_string(o: &xlcli_core::condfmt::StyleOverlay) -> String {
-    let mut parts = Vec::new();
-    if let Some(b) = o.bold { parts.push(if b { "bold".into() } else { "!bold".into() }); }
-    if let Some(b) = o.italic { parts.push(if b { "italic".into() } else { "!italic".into() }); }
-    if let Some(b) = o.underline { parts.push(if b { "under".into() } else { "!under".into() }); }
-    if let Some(b) = o.double_underline { parts.push(if b { "dunder".into() } else { "!dunder".into() }); }
-    if let Some(b) = o.strikethrough { parts.push(if b { "strike".into() } else { "!strike".into() }); }
-    if let Some(c) = o.bg_color { parts.push(format!("bg={}", color_to_hex(c))); }
-    if let Some(c) = o.fg_color { parts.push(format!("fg={}", color_to_hex(c))); }
-    parts.join(" ")
-}
-
-fn color_to_hex(c: Option<xlcli_core::style::Color>) -> String {
-    match c {
-        None => "none".into(),
-        Some(c) => format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b),
-    }
-}
-
-fn cond_to_string(c: &xlcli_core::condfmt::Condition) -> String {
-    use xlcli_core::condfmt::Condition::*;
-    match c {
-        Always => "always".into(),
-        Gt(n) => format!("gt {}", n),
-        Lt(n) => format!("lt {}", n),
-        Gte(n) => format!("gte {}", n),
-        Lte(n) => format!("lte {}", n),
-        Eq(n) => format!("eq {}", n),
-        Neq(n) => format!("neq {}", n),
-        Between(a, b) => format!("between {} {}", a, b),
-        NotBetween(a, b) => format!("notbetween {} {}", a, b),
-        Contains(s) => format!("contains {}", s),
-        NotContains(s) => format!("notcontains {}", s),
-        BeginsWith(s) => format!("beginswith {}", s),
-        EndsWith(s) => format!("endswith {}", s),
-        Blanks => "blanks".into(),
-        NonBlanks => "nonblanks".into(),
-        ContainsErrors => "errors".into(),
-        NotContainsErrors => "noerrors".into(),
-        DuplicateValues => "duplicates".into(),
-        UniqueValues => "unique".into(),
-        Top { count, percent, bottom } => format!("{} {}{}", if *bottom {"bottom"} else {"top"}, count, if *percent {"%"} else {""}),
-        Average { above, equal, std_dev } => format!("avg {}{}{}", if *above {"above"} else {"below"}, if *equal {"=" } else {""}, if *std_dev != 0 {format!(" sd{}", std_dev)} else {String::new()}),
-        TimePeriod(p) => format!("time {:?}", p),
-        Expression(s) => format!("expr {}", s),
-    }
-}
-
-fn range_to_string(r: &xlcli_core::range::CellRange) -> String {
-    format!("{}{}:{}{}",
-        CellAddr::col_name(r.start.col), r.start.row + 1,
-        CellAddr::col_name(r.end.col), r.end.row + 1)
 }
 
 fn parse_cell_address(addr: &str) -> Option<(u32, u16)> {

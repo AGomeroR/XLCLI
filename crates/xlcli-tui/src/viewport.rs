@@ -19,10 +19,6 @@ impl Viewport {
         }
     }
 
-    pub fn update_for_cursor(&mut self, cursor: &CellAddr) {
-        self.update_for_cursor_with_freeze(cursor, 0, 0);
-    }
-
     pub fn update_for_cursor_with_freeze(&mut self, cursor: &CellAddr, freeze_rows: u32, freeze_cols: u16) {
         // Always ensure scrollable area starts past frozen region
         if self.top_row < freeze_rows {

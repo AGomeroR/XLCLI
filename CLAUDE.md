@@ -109,6 +109,16 @@ Status: [x]=done [ ]=pending [~]=in progress
 - [ ] Add `rust-toolchain.toml` pinning compiler (currently relies on user-installed Rust ≥ 1.75)
 - [ ] CI workflow (cargo build + clippy + test + package builds on push)
 
+### Search (vim-style)
+- [x] `Mode::Search` added; `/` enters, `Enter` executes, `Esc` cancels
+- [x] Case-insensitive substring match against `display_value()`, active sheet only
+- [x] `n` next / `N` prev with wrap-around
+- [x] All matches highlighted yellow bg; current match bold light-yellow at cursor
+- [x] `Esc` in Normal clears highlights when search active
+- [x] Status line shows `/query [idx/total]`
+- [x] `App` state: `search_buffer`, `search_results: Vec<(u32,u16)>`, `search_idx`, `search_active`
+- [x] `render_search_bar` renders bottom-center 60-wide Cyan box during Search mode
+
 ### Pending broader items
 - [ ] Phase 4: charts, pivots
 - [ ] Phase 5: Python scripting (PyO3 + bundled CPython)

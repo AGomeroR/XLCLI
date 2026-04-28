@@ -612,7 +612,7 @@ fn parse_styles_xml(xml: &str) -> Option<(Vec<XlsxFont>, Vec<XlsxFill>, Vec<Xlsx
     let mut in_cellxfs = false;
     let mut cur_font: Option<XlsxFont> = None;
     let mut cur_fill: Option<XlsxFill> = None;
-    let mut in_patternFill = false;
+    let mut in_pattern_fill = false;
 
     loop {
         let ev = r.read_event_into(&mut buf).ok()?;
@@ -624,7 +624,7 @@ fn parse_styles_xml(xml: &str) -> Option<(Vec<XlsxFont>, Vec<XlsxFill>, Vec<Xlsx
                     b"cellXfs" => in_cellxfs = true,
                     b"font" if in_fonts => cur_font = Some(XlsxFont::default()),
                     b"fill" if in_fills => cur_fill = Some(XlsxFill::default()),
-                    b"patternFill" if cur_fill.is_some() => in_patternFill = true,
+                    b"patternFill" if cur_fill.is_some() => in_pattern_fill = true,
                     b"xf" if in_cellxfs => {
                         xfs.push(parse_xf_attrs(&e));
                     }
@@ -656,12 +656,12 @@ fn parse_styles_xml(xml: &str) -> Option<(Vec<XlsxFont>, Vec<XlsxFill>, Vec<Xlsx
                             cur_font.as_mut().unwrap().color = Some(c);
                         }
                     }
-                    b"fgColor" if in_patternFill => {
+                    b"fgColor" if in_pattern_fill => {
                         if let Some(c) = parse_color_attr(&e) {
                             cur_fill.as_mut().unwrap().bg = Some(c);
                         }
                     }
-                    b"bgColor" if in_patternFill => {
+                    b"bgColor" if in_pattern_fill => {
                         if cur_fill.as_ref().map_or(true, |f| f.bg.is_none()) {
                             if let Some(c) = parse_color_attr(&e) {
                                 cur_fill.as_mut().unwrap().bg = Some(c);
@@ -691,7 +691,7 @@ fn parse_styles_xml(xml: &str) -> Option<(Vec<XlsxFont>, Vec<XlsxFill>, Vec<Xlsx
                     b"cellXfs" => in_cellxfs = false,
                     b"font" => { if let Some(f) = cur_font.take() { fonts.push(f); } }
                     b"fill" => { if let Some(f) = cur_fill.take() { fills.push(f); } }
-                    b"patternFill" => in_patternFill = false,
+                    b"patternFill" => in_pattern_fill = false,
                     _ => {}
                 }
             }

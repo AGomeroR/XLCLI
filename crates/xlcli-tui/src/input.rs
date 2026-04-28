@@ -58,6 +58,7 @@ pub fn handle_event(app: &mut App, event: Event) {
             Mode::Command => handle_command(app, key),
             Mode::Insert => handle_insert(app, key),
             Mode::Visual => handle_visual(app, key),
+            Mode::Search => handle_search(app, key),
         },
         Event::Mouse(mouse) => handle_mouse(app, mouse),
         _ => {}
@@ -141,6 +142,23 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         (KeyModifiers::NONE, KeyCode::Char(':')) => {
             app.mode = Mode::Command;
             app.command_buffer.clear();
+        }
+
+        // Search mode
+        (KeyModifiers::NONE, KeyCode::Char('/')) => {
+            app.enter_search();
+        }
+        (KeyModifiers::NONE, KeyCode::Char('n')) => {
+            app.search_next();
+        }
+        (KeyModifiers::SHIFT, KeyCode::Char('N')) => {
+            app.search_prev();
+        }
+        (KeyModifiers::NONE, KeyCode::Esc) => {
+            if app.search_active {
+                app.clear_search();
+                app.status_message = Some("Search cleared".to_string());
+            }
         }
 
         // Undo/Redo
@@ -232,6 +250,25 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         _ => {}
     }
     app.pending_key = None;
+}
+
+fn handle_search(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Enter => {
+            app.execute_search();
+        }
+        KeyCode::Esc => {
+            app.search_buffer.clear();
+            app.mode = Mode::Normal;
+        }
+        KeyCode::Backspace => {
+            app.search_buffer.pop();
+        }
+        KeyCode::Char(c) => {
+            app.search_buffer.push(c);
+        }
+        _ => {}
+    }
 }
 
 fn handle_command(app: &mut App, key: KeyEvent) {

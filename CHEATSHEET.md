@@ -10,6 +10,18 @@ xlcli has 4 modes, like Vim:
 | Insert    | `INSERT`  | `Enter`, `i`, `a`, `s`, `=` | `Esc`, `Enter`, `Tab` |
 | Visual    | `VISUAL`  | `v`                       | `Esc`, `y`, `d`   |
 | Command   | `COMMAND` | `:`                       | `Enter`, `Esc`    |
+| Search    | `SEARCH`  | `/`                       | `Enter`, `Esc`    |
+
+### Search
+
+| Key       | Action                                                  |
+|-----------|---------------------------------------------------------|
+| `/text`   | Enter search mode, type query, `Enter` to execute       |
+| `n`       | Jump to next match (wraps at end)                       |
+| `N`       | Jump to previous match (wraps at start)                 |
+| `Esc`     | (in Normal) clear search highlights                     |
+
+Match is case-insensitive substring against rendered cell value, active sheet only. All matches highlighted yellow; current match is bold light-yellow.
 
 ---
 

@@ -37,6 +37,10 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         render_command_palette(frame, app, size);
     }
 
+    if app.mode == Mode::Search {
+        render_search_bar(frame, app, size);
+    }
+
     if app.mode == Mode::Insert && app.autocomplete.visible && app.config.formula_autocomplete.enabled {
         render_autocomplete(frame, app, size);
     }
@@ -97,6 +101,29 @@ fn render_formula_error(frame: &mut Frame, app: &App, size: Rect, err: &xlcli_fo
     let msg_area = Rect { x: 0, y: 2, width: size.width, height: 1 };
     frame.render_widget(caret_para, caret_area);
     frame.render_widget(msg_para, msg_area);
+}
+
+fn render_search_bar(frame: &mut Frame, app: &App, area: Rect) {
+    let width: u16 = 60.min(area.width.saturating_sub(2));
+    let height: u16 = 3;
+    let x = (area.width.saturating_sub(width)) / 2;
+    let y = area.height.saturating_sub(height + 2);
+    let bar = Rect::new(x, y, width, height);
+    frame.render_widget(Clear, bar);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(Span::styled(
+            " Search ",
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        ));
+    let inner = block.inner(bar);
+    frame.render_widget(block, bar);
+    let line = Line::from(vec![
+        Span::styled(format!("/{}", app.search_buffer), Style::default().fg(Color::White)),
+        Span::styled("\u{2588}", Style::default().fg(Color::Cyan)),
+    ]);
+    frame.render_widget(Paragraph::new(line), inner);
 }
 
 fn render_formula_bar(frame: &mut Frame, app: &App, area: Rect) {
@@ -335,6 +362,10 @@ fn render_cell_span<'a>(
 ) {
     let is_cursor = data_row == app.cursor.row && data_col == app.cursor.col;
     let in_visual = is_in_visual_selection(app, data_row, data_col);
+    let is_search_hit = app.search_active
+        && app.search_results.iter().any(|&(r, c)| r == data_row && c == data_col);
+    let is_current_search = app.search_active
+        && app.search_results.get(app.search_idx).map_or(false, |&(r, c)| r == data_row && c == data_col);
 
     let cell_text = if is_cursor && app.mode == Mode::Insert {
         app.edit_buffer.clone()
@@ -364,11 +395,15 @@ fn render_cell_span<'a>(
     let mut style = if is_cursor {
         if app.mode == Mode::Insert {
             Style::default().fg(Color::White).bg(Color::Blue)
+        } else if is_current_search {
+            Style::default().fg(Color::Black).bg(Color::LightYellow).add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::Black).bg(Color::White)
         }
     } else if in_visual {
         Style::default().fg(Color::Black).bg(Color::Magenta)
+    } else if is_search_hit {
+        Style::default().fg(Color::Black).bg(Color::Yellow)
     } else if is_header {
         Style::default().fg(Color::White).bg(Color::DarkGray)
     } else {
@@ -413,6 +448,7 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         Mode::Insert => Style::default().fg(Color::Black).bg(Color::Blue),
         Mode::Visual => Style::default().fg(Color::Black).bg(Color::Magenta),
         Mode::Command => Style::default().fg(Color::Black).bg(Color::Yellow),
+        Mode::Search => Style::default().fg(Color::Black).bg(Color::Cyan),
     };
 
     let cell_name = app.cursor.display_name();

@@ -116,7 +116,7 @@ impl Sheet {
         None
     }
 
-    fn eval_contextual(&self, cond: &Condition, range: &crate::range::CellRange, row: u32, col: u16, val: &CellValue) -> bool {
+    fn eval_contextual(&self, cond: &Condition, range: &crate::range::CellRange, _row: u32, _col: u16, val: &CellValue) -> bool {
         match cond {
             Condition::DuplicateValues | Condition::UniqueValues => {
                 let disp = val.display_value();
