@@ -1,8 +1,12 @@
 /target
-Cargo.lock
 *.swp
 *.swo
 *~
 .DS_Store
 *.xlsx
+/assets/completions/
+/packaging/arch/pkg/
+/packaging/arch/src/
+/packaging/arch/*.tar.gz
+/packaging/arch/*.pkg.tar.zst
 

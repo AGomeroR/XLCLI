@@ -298,14 +298,15 @@ pub enum CfDialogFocus {
     Cond,
     Val1,
     Val2,
-    Bold, Italic, Under, DUnder, Strike, Over,
-    Bg, Fg,
+    Bold, Italic, Under, DUnder, Strike,
+    Bg, BgHex, Fg, FgHex,
     RulesList,
-    BtnApply,
     BtnBase,
+    BtnDismiss,
+    BtnApply,
+    BtnClose,
     BtnDelete,
     BtnCleanAll,
-    BtnClose,
 }
 
 impl CfDialogFocus {
@@ -317,20 +318,22 @@ impl CfDialogFocus {
             Italic => Under,
             Under => DUnder,
             DUnder => Strike,
-            Strike => Over,
-            Over => Bg,
-            Bg => Fg,
-            Fg => Conditional,
-            Conditional => if conditional { Cond } else { RulesList },
+            Strike => Bg,
+            Bg => BgHex,
+            BgHex => Fg,
+            Fg => FgHex,
+            FgHex => Conditional,
+            Conditional => if conditional { Cond } else { BtnBase },
             Cond => Val1,
             Val1 => Val2,
-            Val2 => RulesList,
-            RulesList => BtnApply,
-            BtnApply => BtnBase,
-            BtnBase => BtnDelete,
-            BtnDelete => BtnCleanAll,
-            BtnCleanAll => BtnClose,
+            Val2 => BtnBase,
+            RulesList => BtnBase,
+            BtnBase => BtnDismiss,
+            BtnDismiss => BtnApply,
+            BtnApply => BtnClose,
             BtnClose => Range,
+            BtnDelete => BtnClose,
+            BtnCleanAll => BtnClose,
         }
     }
     pub fn prev(&self, conditional: bool) -> Self {
@@ -342,25 +345,36 @@ impl CfDialogFocus {
             Under => Italic,
             DUnder => Under,
             Strike => DUnder,
-            Over => Strike,
-            Bg => Over,
-            Fg => Bg,
-            Conditional => Fg,
+            Bg => Strike,
+            BgHex => Bg,
+            Fg => BgHex,
+            FgHex => Fg,
+            Conditional => FgHex,
             Cond => Conditional,
             Val1 => Cond,
             Val2 => Val1,
             RulesList => if conditional { Val2 } else { Conditional },
-            BtnApply => RulesList,
-            BtnBase => BtnApply,
-            BtnDelete => BtnBase,
-            BtnCleanAll => BtnDelete,
-            BtnClose => BtnCleanAll,
+            BtnBase => if conditional { Val2 } else { Conditional },
+            BtnDismiss => BtnBase,
+            BtnApply => BtnDismiss,
+            BtnClose => BtnApply,
+            BtnDelete => BtnClose,
+            BtnCleanAll => BtnClose,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CfDropdown { None, Cond, Bg, Fg }
+
+#[derive(Debug, Clone, Default)]
+pub struct CfListDialog {
+    pub visible: bool,
+    pub selected: usize,
+    pub scroll: usize,
+    pub pending_d: bool,
+    pub rect: (u16, u16, u16, u16),
+}
 
 #[derive(Debug, Clone)]
 pub struct CfDialog {
@@ -377,9 +391,10 @@ pub struct CfDialog {
     pub under: bool,
     pub dunder: bool,
     pub strike: bool,
-    pub over: bool,
     pub bg_idx: usize, // into CF_COLORS (0 = none)
     pub fg_idx: usize,
+    pub bg_hex: String, // optional "#RRGGBB", overrides preset when valid
+    pub fg_hex: String,
     pub open_dropdown: CfDropdown,
     pub dropdown_scroll: usize,
     pub rules_selected: usize,
@@ -403,12 +418,14 @@ pub struct CfDialog {
     pub rect_under: (u16, u16, u16),
     pub rect_dunder: (u16, u16, u16),
     pub rect_strike: (u16, u16, u16),
-    pub rect_over: (u16, u16, u16),
     pub rect_bg: (u16, u16, u16),
+    pub rect_bg_hex: (u16, u16, u16),
     pub rect_fg: (u16, u16, u16),
+    pub rect_fg_hex: (u16, u16, u16),
     pub rect_rules: (u16, u16, u16, u16), // x,y,w,h
     pub rect_apply: (u16, u16, u16),
     pub rect_base: (u16, u16, u16),
+    pub rect_dismiss: (u16, u16, u16),
     pub rect_delete: (u16, u16, u16),
     pub rect_cleanall: (u16, u16, u16),
     pub rect_close: (u16, u16, u16),
@@ -420,10 +437,12 @@ pub struct App {
     pub viewport: Viewport,
     pub mode: Mode,
     pub command_buffer: String,
+    pub cmd_palette_selected: usize,
     pub should_quit: bool,
     pub status_message: Option<String>,
     pub pending_key: Option<char>,
     pub edit_buffer: String,
+    pub edit_cursor: usize,
     pub undo_stack: UndoStack,
     pub clipboard: Clipboard,
     pub visual_anchor: Option<CellAddr>,
@@ -437,6 +456,26 @@ pub struct App {
     pub sort_dialog: SortDialog,
     pub filter_dialog: FilterDialog,
     pub cf_dialog: CfDialog,
+    pub cf_list: CfListDialog,
+    pub formula_error: Option<xlcli_formulas::ParseError>,
+}
+
+impl App {
+    pub fn recompute_formula_error(&mut self) {
+        self.formula_error = if self.mode == Mode::Insert {
+            if let Some(body) = self.edit_buffer.strip_prefix('=') {
+                if body.trim().is_empty() {
+                    None
+                } else {
+                    xlcli_formulas::parse(body).err()
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+    }
 }
 
 pub struct AutocompleteState {
@@ -448,16 +487,19 @@ pub struct AutocompleteState {
 
 impl App {
     pub fn new(workbook: Workbook, config: Config) -> Self {
+        let diag = workbook.load_diagnostic.clone();
         let mut app = Self {
             workbook,
             cursor: CellAddr::new(0, 0, 0),
             viewport: Viewport::new(),
             mode: Mode::Normal,
             command_buffer: String::new(),
+            cmd_palette_selected: 0,
             should_quit: false,
-            status_message: None,
+            status_message: diag,
             pending_key: None,
             edit_buffer: String::new(),
+            edit_cursor: 0,
             undo_stack: UndoStack::new(),
             clipboard: Clipboard::new(),
             visual_anchor: None,
@@ -510,8 +552,9 @@ impl App {
                 cond: CfCond::Gt,
                 val1: String::new(),
                 val2: String::new(),
-                bold: false, italic: false, under: false, dunder: false, strike: false, over: false,
+                bold: false, italic: false, under: false, dunder: false, strike: false,
                 bg_idx: 0, fg_idx: 0,
+                bg_hex: String::new(), fg_hex: String::new(),
                 open_dropdown: CfDropdown::None,
                 dropdown_scroll: 0,
                 rules_selected: 0,
@@ -521,11 +564,13 @@ impl App {
                 rect_conditional: (0,0,0),
                 rect_range: (0,0,0), rect_cond: (0,0,0), rect_val1: (0,0,0), rect_val2: (0,0,0),
                 rect_bold: (0,0,0), rect_italic: (0,0,0), rect_under: (0,0,0),
-                rect_dunder: (0,0,0), rect_strike: (0,0,0), rect_over: (0,0,0),
-                rect_bg: (0,0,0), rect_fg: (0,0,0), rect_rules: (0,0,0,0),
-                rect_apply: (0,0,0), rect_base: (0,0,0), rect_delete: (0,0,0),
+                rect_dunder: (0,0,0), rect_strike: (0,0,0),
+                rect_bg: (0,0,0), rect_bg_hex: (0,0,0), rect_fg: (0,0,0), rect_fg_hex: (0,0,0), rect_rules: (0,0,0,0),
+                rect_apply: (0,0,0), rect_base: (0,0,0), rect_dismiss: (0,0,0), rect_delete: (0,0,0),
                 rect_cleanall: (0,0,0), rect_close: (0,0,0),
             },
+            cf_list: CfListDialog::default(),
+            formula_error: None,
         };
         app.build_dep_graph();
         app.recalc_all();
@@ -584,16 +629,19 @@ impl App {
             })
             .unwrap_or_default();
         self.edit_buffer = current;
+        self.edit_cursor = self.edit_buffer.len();
         self.mode = Mode::Insert;
     }
 
     pub fn enter_insert_clear(&mut self) {
         self.edit_buffer.clear();
+        self.edit_cursor = 0;
         self.mode = Mode::Insert;
     }
 
     pub fn enter_insert_with(&mut self, prefix: &str) {
         self.edit_buffer = prefix.to_string();
+        self.edit_cursor = self.edit_buffer.len();
         self.mode = Mode::Insert;
         self.update_autocomplete();
     }
@@ -689,6 +737,7 @@ impl App {
 
         let prefix = format!("={}", &after_eq[..func_start]);
         self.edit_buffer = format!("{}{}(", prefix, chosen);
+        self.edit_cursor = self.edit_buffer.len();
         self.autocomplete.visible = false;
         self.autocomplete.matches.clear();
         self.autocomplete.selected = 0;
@@ -742,6 +791,7 @@ impl App {
         });
         self.modified = true;
         self.edit_buffer.clear();
+        self.edit_cursor = 0;
         self.mode = Mode::Normal;
         self.status_message = None;
 
@@ -755,6 +805,7 @@ impl App {
             self.restore_sheet_state(origin as usize);
         }
         self.edit_buffer.clear();
+        self.edit_cursor = 0;
         self.mode = Mode::Normal;
         self.status_message = None;
     }
@@ -1734,8 +1785,10 @@ impl App {
             self.list_named_ranges();
         } else if let Some(rest) = cmd.strip_prefix("name ") {
             self.handle_name_command(rest.trim());
-        } else if cmd == "cf" || cmd == "cf list" {
+        } else if cmd == "cf" {
             self.open_cf_dialog();
+        } else if cmd == "cf list" {
+            self.cf_list();
         } else if let Some(rest) = cmd.strip_prefix("cf ") {
             self.handle_cf_command(rest.trim());
         } else if let Some(rest) = cmd.strip_prefix("case ") {
@@ -1848,7 +1901,7 @@ impl App {
                 CellAddr::col_name(c1), r1 + 1,
                 CellAddr::col_name(c2), r2 + 1)
         } else {
-            String::new()
+            format!("{}{}", CellAddr::col_name(self.cursor.col), self.cursor.row + 1)
         };
         self.cf_dialog = CfDialog {
             visible: true,
@@ -1859,8 +1912,9 @@ impl App {
             cond: CfCond::Gt,
             val1: String::new(),
             val2: String::new(),
-            bold: false, italic: false, under: false, dunder: false, strike: false, over: false,
+            bold: false, italic: false, under: false, dunder: false, strike: false,
             bg_idx: 0, fg_idx: 0,
+            bg_hex: String::new(), fg_hex: String::new(),
             open_dropdown: CfDropdown::None,
             dropdown_scroll: 0,
             rules_selected: 0,
@@ -1870,12 +1924,76 @@ impl App {
             rect_conditional: (0,0,0),
             rect_range: (0,0,0), rect_cond: (0,0,0), rect_val1: (0,0,0), rect_val2: (0,0,0),
             rect_bold: (0,0,0), rect_italic: (0,0,0), rect_under: (0,0,0),
-            rect_dunder: (0,0,0), rect_strike: (0,0,0), rect_over: (0,0,0),
-            rect_bg: (0,0,0), rect_fg: (0,0,0), rect_rules: (0,0,0,0),
-            rect_apply: (0,0,0), rect_base: (0,0,0), rect_delete: (0,0,0),
+            rect_dunder: (0,0,0), rect_strike: (0,0,0),
+            rect_bg: (0,0,0), rect_bg_hex: (0,0,0), rect_fg: (0,0,0), rect_fg_hex: (0,0,0), rect_rules: (0,0,0,0),
+            rect_apply: (0,0,0), rect_base: (0,0,0), rect_dismiss: (0,0,0), rect_delete: (0,0,0),
             rect_cleanall: (0,0,0), rect_close: (0,0,0),
         };
         self.visual_anchor = None;
+        self.cf_dialog_prefill_from_existing();
+    }
+
+    fn cf_dialog_prefill_from_existing(&mut self) {
+        let sheet_idx = self.workbook.active_sheet as u16;
+        let sel = match parse_range_arg(&self.cf_dialog.range_text, sheet_idx) {
+            Some(r) => r,
+            None => return,
+        };
+        let sheet = self.workbook.active_sheet();
+        let mut matched: Vec<&xlcli_core::condfmt::CondRule> = sheet.cond_rules.iter()
+            .filter(|r| {
+                r.range.start.row == sel.start.row && r.range.end.row == sel.end.row
+                && r.range.start.col == sel.start.col && r.range.end.col == sel.end.col
+            })
+            .collect();
+        if matched.is_empty() {
+            matched = sheet.cond_rules.iter()
+                .filter(|r| {
+                    sel.start.row >= r.range.start.row && sel.end.row <= r.range.end.row
+                    && sel.start.col >= r.range.start.col && sel.end.col <= r.range.end.col
+                })
+                .collect();
+        }
+        let rule = match matched.last() { Some(r) => *r, None => return };
+        let d = &mut self.cf_dialog;
+        let o = match &rule.style {
+            xlcli_core::condfmt::StyleSpec::Overlay(o) => o,
+            _ => return,
+        };
+        if let Some(b) = o.bold { d.bold = b; }
+        if let Some(b) = o.italic { d.italic = b; }
+        if let Some(b) = o.underline { d.under = b; }
+        if let Some(b) = o.double_underline { d.dunder = b; }
+        if let Some(b) = o.strikethrough { d.strike = b; }
+        if let Some(c) = o.bg_color {
+            let idx = color_to_palette_idx(c);
+            d.bg_idx = idx;
+            if idx == 0 {
+                if let Some(col) = c { d.bg_hex = format!("#{:02X}{:02X}{:02X}", col.r, col.g, col.b); }
+            } else { d.bg_hex.clear(); }
+        }
+        if let Some(c) = o.fg_color {
+            let idx = color_to_palette_idx(c);
+            d.fg_idx = idx;
+            if idx == 0 {
+                if let Some(col) = c { d.fg_hex = format!("#{:02X}{:02X}{:02X}", col.r, col.g, col.b); }
+            } else { d.fg_hex.clear(); }
+        }
+        use xlcli_core::condfmt::Condition;
+        match &rule.cond {
+            Condition::Always => { d.conditional = false; }
+            Condition::Blanks => { d.conditional = true; d.cond = CfCond::Blanks; }
+            Condition::NonBlanks => { d.conditional = true; d.cond = CfCond::NonBlanks; }
+            Condition::Contains(s) => { d.conditional = true; d.cond = CfCond::Contains; d.val1 = s.clone(); }
+            Condition::Between(a, b) => { d.conditional = true; d.cond = CfCond::Between; d.val1 = a.to_string(); d.val2 = b.to_string(); }
+            Condition::Gt(n) => { d.conditional = true; d.cond = CfCond::Gt; d.val1 = n.to_string(); }
+            Condition::Lt(n) => { d.conditional = true; d.cond = CfCond::Lt; d.val1 = n.to_string(); }
+            Condition::Gte(n) => { d.conditional = true; d.cond = CfCond::Gte; d.val1 = n.to_string(); }
+            Condition::Lte(n) => { d.conditional = true; d.cond = CfCond::Lte; d.val1 = n.to_string(); }
+            Condition::Eq(n) => { d.conditional = true; d.cond = CfCond::Eq; d.val1 = n.to_string(); }
+            Condition::Neq(n) => { d.conditional = true; d.cond = CfCond::Neq; d.val1 = n.to_string(); }
+            _ => { d.conditional = true; }
+        }
     }
 
     fn cf_dialog_build_overlay(&self) -> xlcli_core::condfmt::StyleOverlay {
@@ -1886,11 +2004,14 @@ impl App {
         if d.under { o.underline = Some(true); }
         if d.dunder { o.double_underline = Some(true); }
         if d.strike { o.strikethrough = Some(true); }
-        if d.over { o.overline = Some(true); }
-        if d.bg_idx > 0 {
+        if let Some(c) = parse_hex_color(&d.bg_hex) {
+            o.bg_color = Some(Some(c));
+        } else if d.bg_idx > 0 {
             if let Ok(c) = color_by_name(CF_COLORS[d.bg_idx]) { o.bg_color = Some(c); }
         }
-        if d.fg_idx > 0 {
+        if let Some(c) = parse_hex_color(&d.fg_hex) {
+            o.fg_color = Some(Some(c));
+        } else if d.fg_idx > 0 {
             if let Ok(c) = color_by_name(CF_COLORS[d.fg_idx]) { o.fg_color = Some(c); }
         }
         o
@@ -1949,7 +2070,7 @@ impl App {
             return;
         }
         self.workbook.active_sheet_mut().cond_rules.push(xlcli_core::condfmt::CondRule {
-            range, cond, style: overlay,
+            range, cond, style: xlcli_core::condfmt::StyleSpec::Overlay(overlay),
         });
         self.status_message = Some(if self.cf_dialog.conditional { "Rule added" } else { "Format applied" }.to_string());
     }
@@ -1984,9 +2105,17 @@ impl App {
         self.status_message = Some("All rules cleared".to_string());
     }
 
+    pub fn cf_dialog_dismiss(&mut self) {
+        self.cf_dialog.visible = false;
+    }
+
     fn handle_cf_command(&mut self, rest: &str) {
-        // :cf list
         if rest == "list" { self.cf_list(); return; }
+        if rest == "diag" {
+            self.status_message = Some(self.workbook.load_diagnostic.clone()
+                .unwrap_or_else(|| "No load diagnostic".into()));
+            return;
+        }
         // :cf clean ...
         if rest == "clean" {
             self.cf_clean_visual();
@@ -2064,29 +2193,81 @@ impl App {
         self.workbook.active_sheet_mut().cond_rules.push(xlcli_core::condfmt::CondRule {
             range,
             cond,
-            style,
+            style: xlcli_core::condfmt::StyleSpec::Overlay(style),
         });
         self.visual_anchor = None;
         self.status_message = Some("Rule added".to_string());
     }
 
     fn cf_list(&mut self) {
+        self.cf_list = CfListDialog {
+            visible: true,
+            selected: 0,
+            scroll: 0,
+            pending_d: false,
+            rect: (0, 0, 0, 0),
+        };
+    }
+
+    pub fn cf_list_delete(&mut self) {
+        let idx = self.cf_list.selected;
+        let sheet = self.workbook.active_sheet_mut();
+        if idx < sheet.cond_rules.len() {
+            sheet.cond_rules.remove(idx);
+            let n = sheet.cond_rules.len();
+            if self.cf_list.selected >= n && self.cf_list.selected > 0 {
+                self.cf_list.selected -= 1;
+            }
+            self.status_message = Some("Rule deleted".into());
+        }
+    }
+
+    pub fn cf_list_edit(&mut self) {
+        let idx = self.cf_list.selected;
         let sheet = self.workbook.active_sheet();
-        if sheet.cond_rules.is_empty() && sheet.base_style.is_empty() {
-            self.status_message = Some("No rules".to_string());
-            return;
+        if let Some(rule) = sheet.cond_rules.get(idx).cloned() {
+            self.cf_list.visible = false;
+            self.cf_dialog_open_prefill(&rule);
         }
-        let mut parts: Vec<String> = Vec::new();
-        if !sheet.base_style.is_empty() {
-            parts.push(format!("base={}", overlay_to_string(&sheet.base_style)));
-        }
-        for (i, r) in sheet.cond_rules.iter().enumerate() {
-            parts.push(format!("#{} {} {} {}", i,
-                range_to_string(&r.range),
-                cond_to_string(&r.cond),
-                overlay_to_string(&r.style)));
-        }
-        self.status_message = Some(parts.join(" | "));
+    }
+
+    fn cf_dialog_open_prefill(&mut self, rule: &xlcli_core::condfmt::CondRule) {
+        let range_text = format!("{}{}:{}{}",
+            CellAddr::col_name(rule.range.start.col), rule.range.start.row + 1,
+            CellAddr::col_name(rule.range.end.col), rule.range.end.row + 1);
+        self.cf_dialog = CfDialog {
+            visible: true,
+            focus: CfDialogFocus::Range,
+            editing_text: false,
+            conditional: false,
+            range_text,
+            cond: CfCond::Gt,
+            val1: String::new(),
+            val2: String::new(),
+            bold: false, italic: false, under: false, dunder: false, strike: false,
+            bg_idx: 0, fg_idx: 0,
+            bg_hex: String::new(), fg_hex: String::new(),
+            open_dropdown: CfDropdown::None,
+            dropdown_scroll: 0,
+            rules_selected: 0,
+            rules_scroll: 0,
+            screen_x: 0, screen_y: 0, screen_w: 58, screen_h: 24,
+            dd_item_x: 0, dd_item_y: 0, dd_item_w: 0, dd_item_count: 0,
+            rect_conditional: (0,0,0),
+            rect_range: (0,0,0), rect_cond: (0,0,0), rect_val1: (0,0,0), rect_val2: (0,0,0),
+            rect_bold: (0,0,0), rect_italic: (0,0,0), rect_under: (0,0,0),
+            rect_dunder: (0,0,0), rect_strike: (0,0,0),
+            rect_bg: (0,0,0), rect_bg_hex: (0,0,0), rect_fg: (0,0,0), rect_fg_hex: (0,0,0), rect_rules: (0,0,0,0),
+            rect_apply: (0,0,0), rect_base: (0,0,0), rect_dismiss: (0,0,0), rect_delete: (0,0,0),
+            rect_cleanall: (0,0,0), rect_close: (0,0,0),
+        };
+        self.cf_dialog_prefill_from_existing();
+        let _ = rule;
+    }
+
+    pub fn cf_list_new(&mut self) {
+        self.cf_list.visible = false;
+        self.open_cf_dialog();
     }
 
     fn cf_clean_visual(&mut self) {
@@ -2833,7 +3014,6 @@ fn parse_style_overlay(s: &str) -> Result<xlcli_core::condfmt::StyleOverlay, Str
                 "under" | "underline" => overlay.underline = Some(val_bool),
                 "dunder" | "doubleunder" => overlay.double_underline = Some(val_bool),
                 "strike" | "strikethrough" => overlay.strikethrough = Some(val_bool),
-                "over" | "overline" => overlay.overline = Some(val_bool),
                 _ => return Err(format!("Unknown style: {}", key)),
             }
         }
@@ -2860,6 +3040,30 @@ fn color_by_name(name: &str) -> Result<Option<xlcli_core::style::Color>, String>
     Ok(Some(c))
 }
 
+pub fn color_by_name_pub(name: &str) -> Result<Option<xlcli_core::style::Color>, String> {
+    color_by_name(name)
+}
+
+pub fn parse_hex_color(s: &str) -> Option<xlcli_core::style::Color> {
+    let s = s.trim().trim_start_matches('#');
+    if s.len() != 6 { return None; }
+    let r = u8::from_str_radix(&s[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&s[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&s[4..6], 16).ok()?;
+    Some(xlcli_core::style::Color::new(r, g, b))
+}
+
+fn color_to_palette_idx(c: Option<xlcli_core::style::Color>) -> usize {
+    let c = match c { Some(c) => c, None => return 0 };
+    for (i, name) in CF_COLORS.iter().enumerate() {
+        if i == 0 { continue; }
+        if let Ok(Some(pc)) = color_by_name(name) {
+            if pc.r == c.r && pc.g == c.g && pc.b == c.b { return i; }
+        }
+    }
+    0
+}
+
 fn overlay_to_string(o: &xlcli_core::condfmt::StyleOverlay) -> String {
     let mut parts = Vec::new();
     if let Some(b) = o.bold { parts.push(if b { "bold".into() } else { "!bold".into() }); }
@@ -2867,7 +3071,6 @@ fn overlay_to_string(o: &xlcli_core::condfmt::StyleOverlay) -> String {
     if let Some(b) = o.underline { parts.push(if b { "under".into() } else { "!under".into() }); }
     if let Some(b) = o.double_underline { parts.push(if b { "dunder".into() } else { "!dunder".into() }); }
     if let Some(b) = o.strikethrough { parts.push(if b { "strike".into() } else { "!strike".into() }); }
-    if let Some(b) = o.overline { parts.push(if b { "over".into() } else { "!over".into() }); }
     if let Some(c) = o.bg_color { parts.push(format!("bg={}", color_to_hex(c))); }
     if let Some(c) = o.fg_color { parts.push(format!("fg={}", color_to_hex(c))); }
     parts.join(" ")
@@ -2891,9 +3094,21 @@ fn cond_to_string(c: &xlcli_core::condfmt::Condition) -> String {
         Eq(n) => format!("eq {}", n),
         Neq(n) => format!("neq {}", n),
         Between(a, b) => format!("between {} {}", a, b),
+        NotBetween(a, b) => format!("notbetween {} {}", a, b),
         Contains(s) => format!("contains {}", s),
+        NotContains(s) => format!("notcontains {}", s),
+        BeginsWith(s) => format!("beginswith {}", s),
+        EndsWith(s) => format!("endswith {}", s),
         Blanks => "blanks".into(),
         NonBlanks => "nonblanks".into(),
+        ContainsErrors => "errors".into(),
+        NotContainsErrors => "noerrors".into(),
+        DuplicateValues => "duplicates".into(),
+        UniqueValues => "unique".into(),
+        Top { count, percent, bottom } => format!("{} {}{}", if *bottom {"bottom"} else {"top"}, count, if *percent {"%"} else {""}),
+        Average { above, equal, std_dev } => format!("avg {}{}{}", if *above {"above"} else {"below"}, if *equal {"=" } else {""}, if *std_dev != 0 {format!(" sd{}", std_dev)} else {String::new()}),
+        TimePeriod(p) => format!("time {:?}", p),
+        Expression(s) => format!("expr {}", s),
     }
 }
 

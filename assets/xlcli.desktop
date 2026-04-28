@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=xlcli
+GenericName=Spreadsheet Editor
+Comment=Terminal spreadsheet editor
+Exec=xlcli %F
+Icon=xlcli
+Terminal=true
+Categories=Office;Spreadsheet;TextEditor;
+MimeType=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;application/vnd.ms-excel;application/vnd.oasis.opendocument.spreadsheet;text/csv;text/tab-separated-values;
+StartupNotify=false
+Keywords=spreadsheet;excel;xlsx;csv;ods;

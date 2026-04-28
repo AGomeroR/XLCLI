@@ -10,6 +10,7 @@ use crate::app::{App, CF_COLORS, CfCond, CfDialogFocus, CfDropdown, FilterDialog
 use crate::mode::Mode;
 
 pub fn render(frame: &mut Frame, app: &mut App) {
+    app.recompute_formula_error();
     let size = frame.area();
     app.viewport.update_dimensions(size.width, size.height);
     let (freeze_rows, freeze_cols) = app.workbook.active_sheet().freeze.unwrap_or((0, 0));
@@ -57,6 +58,45 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     if app.cf_dialog.visible {
         render_cf_dialog(frame, app, size);
     }
+
+    if app.cf_list.visible {
+        render_cf_list(frame, app, size);
+    }
+
+    if app.mode == Mode::Insert {
+        if let Some(err) = app.formula_error.clone() {
+            render_formula_error(frame, app, size, &err);
+        }
+    }
+}
+
+fn render_formula_error(frame: &mut Frame, app: &App, size: Rect, err: &xlcli_formulas::ParseError) {
+    if size.height < 3 || size.width < 10 {
+        return;
+    }
+    // Formula bar layout: " {:>6} " (8) + " " (1) + edit_buffer. Formula body starts at col 9 + 1 ('=').
+    let body = app.edit_buffer.strip_prefix('=').unwrap_or("");
+    let off = err.offset.min(body.len());
+    let char_col = body[..off].chars().count() as u16;
+    let caret_col = 9u16.saturating_add(1).saturating_add(char_col);
+    let caret_col = caret_col.min(size.width.saturating_sub(1));
+
+    let area = Rect { x: 0, y: 1, width: size.width, height: 2 };
+    frame.render_widget(Clear, area);
+
+    let mut caret_line = String::new();
+    for _ in 0..caret_col { caret_line.push(' '); }
+    caret_line.push('^');
+    let caret_para = Paragraph::new(Line::from(vec![
+        Span::styled(caret_line, Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+    ]));
+    let msg_para = Paragraph::new(Line::from(vec![
+        Span::styled(format!(" {}", err.message), Style::default().fg(Color::Red)),
+    ]));
+    let caret_area = Rect { x: 0, y: 1, width: size.width, height: 1 };
+    let msg_area = Rect { x: 0, y: 2, width: size.width, height: 1 };
+    frame.render_widget(caret_para, caret_area);
+    frame.render_widget(msg_para, msg_area);
 }
 
 fn render_formula_bar(frame: &mut Frame, app: &App, area: Rect) {
@@ -83,16 +123,30 @@ fn render_formula_bar(frame: &mut Frame, app: &App, area: Rect) {
         Style::default().fg(Color::Black).bg(Color::Gray)
     };
 
-    let line = Line::from(vec![
-        Span::styled(format!(" {:>6} ", cell_name), name_style),
-        Span::raw(" "),
-        Span::raw(cell_content),
-        if app.mode == Mode::Insert {
-            Span::styled("█", Style::default().fg(Color::White))
+    let line = if app.mode == Mode::Insert {
+        let cur = app.edit_cursor.min(cell_content.len());
+        let (before, after) = cell_content.split_at(cur);
+        let (under, rest) = if after.is_empty() {
+            (" ".to_string(), String::new())
         } else {
-            Span::raw("")
-        },
-    ]);
+            let mut end = 1;
+            while end < after.len() && !after.is_char_boundary(end) { end += 1; }
+            (after[..end].to_string(), after[end..].to_string())
+        };
+        Line::from(vec![
+            Span::styled(format!(" {:>6} ", cell_name), name_style),
+            Span::raw(" "),
+            Span::raw(before.to_string()),
+            Span::styled(under, Style::default().fg(Color::Black).bg(Color::White)),
+            Span::raw(rest),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled(format!(" {:>6} ", cell_name), name_style),
+            Span::raw(" "),
+            Span::raw(cell_content),
+        ])
+    };
     frame.render_widget(Paragraph::new(line), area);
 }
 
@@ -302,9 +356,12 @@ fn render_cell_span<'a>(
 
     let is_header = app.is_header_row(data_row);
 
-    let effective = sheet.effective_style(data_row, data_col, &xlcli_core::style::CellStyle::default());
+    let base_style = sheet.get_cell(data_row, data_col)
+        .map(|c| app.workbook.style_pool.get(c.style_id).clone())
+        .unwrap_or_default();
+    let effective = sheet.effective_style(data_row, data_col, &base_style);
 
-    let style = if is_cursor {
+    let mut style = if is_cursor {
         if app.mode == Mode::Insert {
             Style::default().fg(Color::White).bg(Color::Blue)
         } else {
@@ -313,7 +370,7 @@ fn render_cell_span<'a>(
     } else if in_visual {
         Style::default().fg(Color::Black).bg(Color::Magenta)
     } else if is_header {
-        Style::default().fg(Color::White).bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+        Style::default().fg(Color::White).bg(Color::DarkGray)
     } else {
         let mut s = Style::default().fg(Color::White);
         if let Some(c) = effective.fg_color {
@@ -322,12 +379,13 @@ fn render_cell_span<'a>(
         if let Some(c) = effective.bg_color {
             s = s.bg(Color::Rgb(c.r, c.g, c.b));
         }
-        if effective.bold { s = s.add_modifier(Modifier::BOLD); }
-        if effective.italic { s = s.add_modifier(Modifier::ITALIC); }
-        if effective.underline || effective.double_underline { s = s.add_modifier(Modifier::UNDERLINED); }
-        if effective.strikethrough { s = s.add_modifier(Modifier::CROSSED_OUT); }
         s
     };
+    if is_header { style = style.add_modifier(Modifier::BOLD); }
+    if effective.bold { style = style.add_modifier(Modifier::BOLD); }
+    if effective.italic { style = style.add_modifier(Modifier::ITALIC); }
+    if effective.underline || effective.double_underline { style = style.add_modifier(Modifier::UNDERLINED); }
+    if effective.strikethrough { style = style.add_modifier(Modifier::CROSSED_OUT); }
 
     spans.push(Span::styled(display, style));
 }
@@ -435,6 +493,28 @@ fn is_col_in_visual(app: &App, col: u16) -> bool {
     }
 }
 
+pub fn fuzzy_score(query: &str, target: &str) -> Option<i32> {
+    if query.is_empty() { return Some(0); }
+    let t = target.to_lowercase();
+    if t.starts_with(query) { return Some(1000 - target.len() as i32); }
+    let mut score = 0i32;
+    let mut last = 0usize;
+    let mut prev_match = false;
+    for qc in query.chars() {
+        match t[last..].find(qc) {
+            Some(pos) => {
+                let abs = last + pos;
+                score += if prev_match { 20 } else { 5 };
+                if abs == 0 { score += 10; }
+                last = abs + qc.len_utf8();
+                prev_match = true;
+            }
+            None => return None,
+        }
+    }
+    Some(score - target.len() as i32)
+}
+
 pub const COMMAND_LIST: &[(&str, &str)] = &[
     ("w", "save file"),
     ("w ", "save as <path>"),
@@ -519,12 +599,12 @@ fn render_command_palette(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     let q = app.command_buffer.to_lowercase();
-    let matches: Vec<(&str, &str)> = COMMAND_LIST
+    let mut scored: Vec<(i32, (&str, &str))> = COMMAND_LIST
         .iter()
-        .filter(|(c, _)| c.starts_with(&q))
-        .copied()
-        .take(10)
+        .filter_map(|e| fuzzy_score(&q, e.0).map(|s| (s, *e)))
         .collect();
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.0.len().cmp(&b.1.0.len())));
+    let matches: Vec<(&str, &str)> = scored.into_iter().take(10).map(|(_, e)| e).collect();
     if matches.is_empty() {
         return;
     }
@@ -542,16 +622,50 @@ fn render_command_palette(frame: &mut Frame, app: &App, area: Rect) {
     let sug_inner = sug_block.inner(sug_area);
     frame.render_widget(sug_block, sug_area);
 
+    let sel = app.cmd_palette_selected.min(matches.len().saturating_sub(1));
     let lines: Vec<Line> = matches
         .iter()
-        .map(|(c, d)| {
+        .enumerate()
+        .map(|(i, (c, d))| {
+            let (cmd_st, desc_st) = if i == sel {
+                (Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD),
+                 Style::default().fg(Color::Black).bg(Color::Yellow))
+            } else {
+                (Style::default().fg(Color::Yellow), Style::default().fg(Color::Gray))
+            };
             Line::from(vec![
-                Span::styled(format!(" :{:<14}", c), Style::default().fg(Color::Yellow)),
-                Span::styled(format!(" {}", d), Style::default().fg(Color::Gray)),
+                Span::styled(format!(" :{:<14}", c), cmd_st),
+                Span::styled(format!(" {}", d), desc_st),
             ])
         })
         .collect();
     frame.render_widget(Paragraph::new(lines), sug_inner);
+
+    let (sel_cmd, sel_desc) = matches[sel];
+    let desc_y = sug_area.y + sug_area.height;
+    let desc_h: u16 = 4;
+    if desc_y + desc_h > area.height {
+        return;
+    }
+    let desc_area = Rect::new(palette_area.x, desc_y, palette_width, desc_h);
+    frame.render_widget(Clear, desc_area);
+    let desc_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title(Span::styled(
+            format!(" :{} ", sel_cmd),
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        ));
+    let desc_inner = desc_block.inner(desc_area);
+    frame.render_widget(desc_block, desc_area);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            sel_desc.to_string(),
+            Style::default().fg(Color::White).add_modifier(Modifier::ITALIC),
+        )))
+        .wrap(ratatui::widgets::Wrap { trim: true }),
+        desc_inner,
+    );
 }
 
 fn render_autocomplete(frame: &mut Frame, app: &App, area: Rect) {
@@ -1088,8 +1202,13 @@ fn render_filter_dialog(frame: &mut Frame, app: &mut App, area: Rect) {
 }
 
 fn render_cf_dialog(frame: &mut Frame, app: &mut App, area: Rect) {
-    let width: u16 = 60;
-    let height: u16 = 28;
+    let width: u16 = 44;
+    // Content rows: 1 blank + 1 Range + 1 blank + 1 Styles label + 6 styles + 1 blank
+    // + 1 BG + 1 FG + 1 blank + 1 Conditional + (2 if conditional) + 1 blank + 4 buttons
+    let base_rows: u16 = 1 + 1 + 1 + 1 + 5 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 4;
+    let extra = if app.cf_dialog.conditional { 2 } else { 0 };
+    let height: u16 = base_rows + extra + 2; // +2 borders
+
     let x = (area.width.saturating_sub(width)) / 2;
     let y = 1u16;
     let dialog_area = Rect::new(
@@ -1108,10 +1227,10 @@ fn render_cf_dialog(frame: &mut Frame, app: &mut App, area: Rect) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan))
+        .border_style(Style::default().fg(Color::Reset))
         .title(Span::styled(
-            " Format ",
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            " Conditional Formatting ",
+            Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD),
         ));
 
     let inner = block.inner(dialog_area);
@@ -1143,6 +1262,8 @@ fn render_cf_dialog(frame: &mut Frame, app: &mut App, area: Rect) {
     let val2_field = format!(" [{:<8}]", d.val2);
     let bg_field = format!(" [{:<8}\u{25bc}]", bg_name);
     let fg_field = format!(" [{:<8}\u{25bc}]", fg_name);
+    let bg_hex_field = format!(" [{:<9}]", if d.bg_hex.is_empty() { "#" } else { d.bg_hex.as_str() });
+    let fg_hex_field = format!(" [{:<9}]", if d.fg_hex.is_empty() { "#" } else { d.fg_hex.as_str() });
 
     let mut lines: Vec<Line> = Vec::with_capacity(inner.height as usize);
     let mut yrow: u16 = 0;
@@ -1166,38 +1287,29 @@ fn render_cf_dialog(frame: &mut Frame, app: &mut App, area: Rect) {
     lines.push(Line::from(Span::styled(" Styles:", label)));
     yrow += 1;
 
-    let bold_s = format!("{} Bold     ", checkbox(d.bold));
+    let bold_s = format!("{} Bold", checkbox(d.bold));
     let italic_s = format!("{} Italic", checkbox(d.italic));
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(bold_s.clone(), focus_style(CfDialogFocus::Bold)),
-        Span::raw("   "),
-        Span::styled(italic_s.clone(), focus_style(CfDialogFocus::Italic)),
-    ]));
-    let bold_y = yrow;
-    yrow += 1;
+    let under_s = format!("{} Underline", checkbox(d.under));
+    let dunder_s = format!("{} Double Underline", checkbox(d.dunder));
+    let strike_s = format!("{} Strikethrough", checkbox(d.strike));
 
-    let under_s = format!("{} Under    ", checkbox(d.under));
-    let dunder_s = format!("{} DUnder", checkbox(d.dunder));
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(under_s.clone(), focus_style(CfDialogFocus::Under)),
-        Span::raw("   "),
-        Span::styled(dunder_s.clone(), focus_style(CfDialogFocus::DUnder)),
-    ]));
-    let under_y = yrow;
-    yrow += 1;
+    let push_style_row = |lines: &mut Vec<Line>, text: String, f: CfDialogFocus| {
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(text, focus_style(f)),
+        ]));
+    };
 
-    let strike_s = format!("{} Strike   ", checkbox(d.strike));
-    let over_s = format!("{} Over", checkbox(d.over));
-    lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(strike_s.clone(), focus_style(CfDialogFocus::Strike)),
-        Span::raw("   "),
-        Span::styled(over_s.clone(), focus_style(CfDialogFocus::Over)),
-    ]));
-    let strike_y = yrow;
-    yrow += 1;
+    push_style_row(&mut lines, bold_s.clone(), CfDialogFocus::Bold);
+    let bold_y = yrow; yrow += 1;
+    push_style_row(&mut lines, italic_s.clone(), CfDialogFocus::Italic);
+    let italic_y = yrow; yrow += 1;
+    push_style_row(&mut lines, under_s.clone(), CfDialogFocus::Under);
+    let under_y = yrow; yrow += 1;
+    push_style_row(&mut lines, dunder_s.clone(), CfDialogFocus::DUnder);
+    let dunder_y = yrow; yrow += 1;
+    push_style_row(&mut lines, strike_s.clone(), CfDialogFocus::Strike);
+    let strike_y = yrow; yrow += 1;
 
     lines.push(Line::from(Span::raw("")));
     yrow += 1;
@@ -1210,11 +1322,51 @@ fn render_cf_dialog(frame: &mut Frame, app: &mut App, area: Rect) {
     yrow += 1;
 
     lines.push(Line::from(vec![
+        Span::styled(" Hex:    ", label),
+        Span::styled(bg_hex_field.clone(), focus_style(CfDialogFocus::BgHex)),
+    ]));
+    let bg_hex_y = yrow;
+    yrow += 1;
+
+    lines.push(Line::from(vec![
         Span::styled(" FG:     ", label),
         Span::styled(fg_field.clone(), focus_style(CfDialogFocus::Fg)),
     ]));
     let fg_y = yrow;
     yrow += 1;
+
+    lines.push(Line::from(vec![
+        Span::styled(" Hex:    ", label),
+        Span::styled(fg_hex_field.clone(), focus_style(CfDialogFocus::FgHex)),
+    ]));
+    let fg_hex_y = yrow;
+    yrow += 1;
+
+    // Preview swatch row
+    {
+        let resolve = |hex: &str, idx: usize| -> Option<xlcli_core::style::Color> {
+            if let Some(c) = crate::app::parse_hex_color(hex) { return Some(c); }
+            if idx > 0 {
+                if let Ok(Some(c)) = crate::app::color_by_name_pub(CF_COLORS[idx]) { return Some(c); }
+            }
+            None
+        };
+        let bg = resolve(&d.bg_hex, d.bg_idx);
+        let fg = resolve(&d.fg_hex, d.fg_idx);
+        let mut sw = Style::default();
+        if let Some(c) = fg { sw = sw.fg(Color::Rgb(c.r, c.g, c.b)); }
+        if let Some(c) = bg { sw = sw.bg(Color::Rgb(c.r, c.g, c.b)); }
+        if d.bold { sw = sw.add_modifier(Modifier::BOLD); }
+        if d.italic { sw = sw.add_modifier(Modifier::ITALIC); }
+        if d.under { sw = sw.add_modifier(Modifier::UNDERLINED); }
+        if d.strike { sw = sw.add_modifier(Modifier::CROSSED_OUT); }
+        lines.push(Line::from(vec![
+            Span::styled(" Preview:", label),
+            Span::raw(" "),
+            Span::styled("\u{25CF} Sample", sw),
+        ]));
+        yrow += 1;
+    }
 
     lines.push(Line::from(Span::raw("")));
     yrow += 1;
@@ -1253,63 +1405,26 @@ fn render_cf_dialog(frame: &mut Frame, app: &mut App, area: Rect) {
     lines.push(Line::from(Span::raw("")));
     yrow += 1;
 
-    let sheet = app.workbook.active_sheet();
-    let rules = &sheet.cond_rules;
-    let has_base = !sheet.base_style.is_empty();
-    let header = format!(" Rules ({}{}):", rules.len(), if has_base { " +base" } else { "" });
-    lines.push(Line::from(Span::styled(header, label)));
-    yrow += 1;
-    let rules_y = yrow;
-
-    let rules_area_height: u16 = 5;
-    let sel = d.rules_selected;
-    let mut scroll = d.rules_scroll;
-    if sel >= scroll + rules_area_height as usize {
-        scroll = sel + 1 - rules_area_height as usize;
-    }
-    if sel < scroll { scroll = sel; }
-    for i in 0..rules_area_height as usize {
-        let idx = scroll + i;
-        if idx >= rules.len() {
-            lines.push(Line::from(Span::raw("")));
-            yrow += 1;
-            continue;
-        }
-        let r = &rules[idx];
-        let marker = if idx == sel && d_focus == CfDialogFocus::RulesList { ">" } else { " " };
-        let text = format!(" {} #{} {} {} {}", marker, idx,
-            cf_range_str(&r.range), cf_cond_str(&r.cond), cf_overlay_str(&r.style));
-        let truncated: String = text.chars().take(inner.width as usize).collect();
-        let style = if idx == sel && d_focus == CfDialogFocus::RulesList {
-            Style::default().fg(Color::Black).bg(Color::Cyan)
-        } else {
-            Style::default().fg(Color::White)
-        };
-        lines.push(Line::from(Span::styled(truncated, style)));
-        yrow += 1;
-    }
-
-    lines.push(Line::from(Span::raw("")));
-    yrow += 1;
-
     lines.push(Line::from(vec![
-        Span::raw("  "),
-        Span::styled(" Apply ", focus_style(CfDialogFocus::BtnApply)),
         Span::raw("  "),
         Span::styled(" SetBase ", focus_style(CfDialogFocus::BtnBase)),
-        Span::raw("  "),
-        Span::styled(" Delete ", focus_style(CfDialogFocus::BtnDelete)),
     ]));
-    let btn1_y = yrow;
-    yrow += 1;
-
+    let base_btn_y = yrow; yrow += 1;
     lines.push(Line::from(vec![
         Span::raw("  "),
-        Span::styled(" CleanAll ", focus_style(CfDialogFocus::BtnCleanAll)),
-        Span::raw("  "),
-        Span::styled(" Close ", focus_style(CfDialogFocus::BtnClose)),
+        Span::styled(" Dismiss ", focus_style(CfDialogFocus::BtnDismiss)),
     ]));
-    let btn2_y = yrow;
+    let dismiss_btn_y = yrow; yrow += 1;
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled(" Apply   ", focus_style(CfDialogFocus::BtnApply)),
+    ]));
+    let apply_btn_y = yrow; yrow += 1;
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        Span::styled(" Apply & Close ", focus_style(CfDialogFocus::BtnClose)),
+    ]));
+    let close_btn_y = yrow;
 
     frame.render_widget(Paragraph::new(lines), inner);
 
@@ -1328,23 +1443,23 @@ fn render_cf_dialog(frame: &mut Frame, app: &mut App, area: Rect) {
         d.rect_val1 = (0, 0, 0);
         d.rect_val2 = (0, 0, 0);
     }
-    let col1_x = ix + 2;
-    let col2_x = col1_x + bold_s.chars().count() as u16 + 3;
-    d.rect_bold   = (col1_x, iy + bold_y, bold_s.chars().count() as u16);
-    d.rect_italic = (col2_x, iy + bold_y, italic_s.chars().count() as u16);
-    d.rect_under  = (col1_x, iy + under_y, under_s.chars().count() as u16);
-    d.rect_dunder = (col2_x, iy + under_y, dunder_s.chars().count() as u16);
-    d.rect_strike = (col1_x, iy + strike_y, strike_s.chars().count() as u16);
-    d.rect_over   = (col2_x, iy + strike_y, over_s.chars().count() as u16);
+    let col_x = ix + 2;
+    d.rect_bold   = (col_x, iy + bold_y, bold_s.chars().count() as u16);
+    d.rect_italic = (col_x, iy + italic_y, italic_s.chars().count() as u16);
+    d.rect_under  = (col_x, iy + under_y, under_s.chars().count() as u16);
+    d.rect_dunder = (col_x, iy + dunder_y, dunder_s.chars().count() as u16);
+    d.rect_strike = (col_x, iy + strike_y, strike_s.chars().count() as u16);
     d.rect_bg = (ix + 9, iy + bg_y, bg_field.chars().count() as u16);
+    d.rect_bg_hex = (ix + 9, iy + bg_hex_y, bg_hex_field.chars().count() as u16);
     d.rect_fg = (ix + 9, iy + fg_y, fg_field.chars().count() as u16);
-    d.rect_rules = (ix, iy + rules_y, inner.width, rules_area_height);
-    d.rules_scroll = scroll;
-    d.rect_apply    = (ix + 2,  iy + btn1_y, 7);
-    d.rect_base     = (ix + 11, iy + btn1_y, 9);
-    d.rect_delete   = (ix + 22, iy + btn1_y, 8);
-    d.rect_cleanall = (ix + 2,  iy + btn2_y, 10);
-    d.rect_close    = (ix + 14, iy + btn2_y, 7);
+    d.rect_fg_hex = (ix + 9, iy + fg_hex_y, fg_hex_field.chars().count() as u16);
+    d.rect_rules = (0, 0, 0, 0);
+    d.rect_base     = (ix + 2, iy + base_btn_y, 9);
+    d.rect_dismiss  = (ix + 2, iy + dismiss_btn_y, 9);
+    d.rect_apply    = (ix + 2, iy + apply_btn_y, 9);
+    d.rect_close    = (ix + 2, iy + close_btn_y, 9);
+    d.rect_delete   = (0, 0, 0);
+    d.rect_cleanall = (0, 0, 0);
 
     let open_dd = d.open_dropdown;
     let dd_scroll = d.dropdown_scroll;
@@ -1425,9 +1540,31 @@ fn cf_cond_str(c: &xlcli_core::condfmt::Condition) -> String {
         Eq(n) => format!("eq {}", n),
         Neq(n) => format!("neq {}", n),
         Between(a, b) => format!("between {} {}", a, b),
+        NotBetween(a, b) => format!("notbetween {} {}", a, b),
         Contains(s) => format!("contains \"{}\"", s),
+        NotContains(s) => format!("notcontains \"{}\"", s),
+        BeginsWith(s) => format!("begins \"{}\"", s),
+        EndsWith(s) => format!("ends \"{}\"", s),
         Blanks => "blanks".into(),
         NonBlanks => "nonblanks".into(),
+        ContainsErrors => "errors".into(),
+        NotContainsErrors => "no-errors".into(),
+        DuplicateValues => "duplicates".into(),
+        UniqueValues => "unique".into(),
+        Top { count, percent, bottom } => format!("{}{} {}", if *bottom {"bottom"} else {"top"}, if *percent {"%"} else {""}, count),
+        Average { above, .. } => format!("avg {}", if *above {"above"} else {"below"}),
+        TimePeriod(p) => format!("time {:?}", p),
+        Expression(s) => format!("expr {}", s),
+    }
+}
+
+fn cf_style_str(s: &xlcli_core::condfmt::StyleSpec) -> String {
+    use xlcli_core::condfmt::StyleSpec::*;
+    match s {
+        Overlay(o) => cf_overlay_str(o),
+        ColorScale(stops) => format!("color-scale ({} stops)", stops.len()),
+        DataBar { .. } => "data-bar".into(),
+        IconSet { kind, .. } => format!("icons {:?}", kind),
     }
 }
 
@@ -1438,7 +1575,6 @@ fn cf_overlay_str(o: &xlcli_core::condfmt::StyleOverlay) -> String {
     if o.underline == Some(true) { p.push("under"); }
     if o.double_underline == Some(true) { p.push("dunder"); }
     if o.strikethrough == Some(true) { p.push("strike"); }
-    if o.overline == Some(true) { p.push("over"); }
     let mut s = p.join(" ");
     if let Some(c) = o.bg_color {
         if !s.is_empty() { s.push(' '); }
@@ -1456,4 +1592,50 @@ fn color_name_or_hex(c: Option<xlcli_core::style::Color>) -> String {
         None => "none".into(),
         Some(c) => format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b),
     }
+}
+
+fn render_cf_list(frame: &mut Frame, app: &mut App, area: Rect) {
+    let rules = &app.workbook.active_sheet().cond_rules;
+    let width: u16 = 70.min(area.width.saturating_sub(4));
+    let inner_h = (rules.len().max(1) as u16).min(12);
+    let height: u16 = inner_h + 4; // borders + header + footer hint
+    let x = (area.width.saturating_sub(width)) / 2;
+    let y = (area.height.saturating_sub(height)) / 3;
+    let dialog_area = Rect::new(x, y, width.min(area.width), height.min(area.height.saturating_sub(1)));
+
+    frame.render_widget(Clear, dialog_area);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Reset))
+        .title(Span::styled(" Conditional Rules ",
+            Style::default().fg(Color::Reset).add_modifier(Modifier::BOLD)));
+    let inner = block.inner(dialog_area);
+    frame.render_widget(block, dialog_area);
+
+    app.cf_list.rect = (inner.x, inner.y, inner.width, inner.height);
+
+    let sel = app.cf_list.selected;
+    let scroll = app.cf_list.scroll;
+    let mut lines: Vec<Line> = Vec::new();
+
+    if rules.is_empty() {
+        lines.push(Line::from(Span::styled("  (no rules)", Style::default().fg(Color::DarkGray))));
+    } else {
+        for (i, r) in rules.iter().enumerate().skip(scroll).take(inner_h as usize) {
+            let s = format!(" #{:<2} {:<14} {:<16} {}",
+                i, cf_range_str(&r.range), cf_cond_str(&r.cond), cf_style_str(&r.style));
+            let style = if i == sel {
+                Style::default().fg(Color::Black).bg(Color::Cyan)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            lines.push(Line::from(Span::styled(s, style)));
+        }
+    }
+    lines.push(Line::from(Span::raw("")));
+    lines.push(Line::from(Span::styled(
+        " j/k nav  Enter edit  dd delete  a new  Esc close",
+        Style::default().fg(Color::DarkGray))));
+
+    frame.render_widget(Paragraph::new(lines), inner);
 }

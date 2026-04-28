@@ -3,15 +3,38 @@ use logos::Logos;
 use crate::ast::*;
 use crate::token::Token;
 
-pub fn parse(input: &str) -> Result<Expr, String> {
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParseError {
+    pub offset: usize,
+    pub message: String,
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} (at byte {})", self.message, self.offset)
+    }
+}
+
+impl std::error::Error for ParseError {}
+
+impl From<ParseError> for String {
+    fn from(e: ParseError) -> String { e.message }
+}
+
+pub fn parse(input: &str) -> Result<Expr, ParseError> {
     let mut parser = Parser::new(input);
     let expr = parser.parse_expr(0)?;
+    if parser.pos < parser.tokens.len() {
+        let (tok, _, start) = parser.tokens[parser.pos].clone();
+        return Err(ParseError { offset: start, message: format!("Unexpected token: {:?}", tok) });
+    }
     Ok(expr)
 }
 
 struct Parser<'src> {
-    tokens: Vec<(Token<'src>, &'src str)>,
+    tokens: Vec<(Token<'src>, &'src str, usize)>,
     pos: usize,
+    input_len: usize,
 }
 
 impl<'src> Parser<'src> {
@@ -19,35 +42,41 @@ impl<'src> Parser<'src> {
         let mut tokens = Vec::new();
         let mut lex = Token::lexer(input);
         while let Some(tok) = lex.next() {
+            let span = lex.span();
             if let Ok(t) = tok {
-                tokens.push((t, lex.slice()));
+                tokens.push((t, lex.slice(), span.start));
             }
         }
-        Self { tokens, pos: 0 }
+        let input_len = input.len();
+        Self { tokens, pos: 0, input_len }
     }
 
     fn peek(&self) -> Option<&Token<'src>> {
-        self.tokens.get(self.pos).map(|(t, _)| t)
+        self.tokens.get(self.pos).map(|(t, _, _)| t)
     }
 
-    fn advance(&mut self) -> Option<(Token<'src>, &'src str)> {
+    fn cur_offset(&self) -> usize {
+        self.tokens.get(self.pos).map(|(_, _, s)| *s).unwrap_or(self.input_len)
+    }
+
+    fn advance(&mut self) -> Option<(Token<'src>, &'src str, usize)> {
         let tok = self.tokens.get(self.pos).cloned();
         self.pos += 1;
         tok
     }
 
-    fn expect(&mut self, expected: &Token) -> Result<(), String> {
+    fn expect(&mut self, expected: &Token) -> Result<(), ParseError> {
         match self.peek() {
             Some(t) if t == expected => {
                 self.advance();
                 Ok(())
             }
-            Some(t) => Err(format!("Expected {:?}, got {:?}", expected, t)),
-            None => Err(format!("Expected {:?}, got end of input", expected)),
+            Some(t) => Err(ParseError { offset: self.cur_offset(), message: format!("Expected {:?}, got {:?}", expected, t) }),
+            None => Err(ParseError { offset: self.input_len, message: format!("Expected {:?}, got end of input", expected) }),
         }
     }
 
-    fn parse_expr(&mut self, min_bp: u8) -> Result<Expr, String> {
+    fn parse_expr(&mut self, min_bp: u8) -> Result<Expr, ParseError> {
         let mut lhs = self.parse_prefix()?;
 
         loop {
@@ -85,35 +114,36 @@ impl<'src> Parser<'src> {
         Ok(lhs)
     }
 
-    fn parse_prefix(&mut self) -> Result<Expr, String> {
+    fn parse_prefix(&mut self) -> Result<Expr, ParseError> {
+        let cur_off = self.cur_offset();
         match self.peek().cloned() {
             Some(Token::Number(..)) => {
-                let (_, slice) = self.advance().unwrap();
-                let n: f64 = slice.parse().map_err(|e| format!("Bad number: {}", e))?;
+                let (_, slice, off) = self.advance().unwrap();
+                let n: f64 = slice.parse().map_err(|e| ParseError { offset: off, message: format!("Bad number: {}", e) })?;
                 Ok(Expr::Number(n))
             }
             Some(Token::StringLit(..)) => {
-                let (_, slice) = self.advance().unwrap();
+                let (_, slice, _) = self.advance().unwrap();
                 let s = &slice[1..slice.len() - 1];
                 let s = s.replace("\\\"", "\"");
                 Ok(Expr::String(s))
             }
             Some(Token::Boolean(..)) => {
-                let (_, slice) = self.advance().unwrap();
+                let (_, slice, _) = self.advance().unwrap();
                 Ok(Expr::Boolean(slice.eq_ignore_ascii_case("true")))
             }
             Some(Token::SheetRefQuoted(..)) | Some(Token::SheetRef(..)) => {
-                let (_, slice) = self.advance().unwrap();
-                let cell = parse_sheet_cell_ref(slice)?;
+                let (_, slice, off) = self.advance().unwrap();
+                let cell = parse_sheet_cell_ref(slice).map_err(|m| ParseError { offset: off, message: m })?;
                 if self.peek() == Some(&Token::Colon) {
                     self.advance();
                     match self.peek() {
                         Some(Token::CellRef(..)) | Some(Token::SheetRef(..)) | Some(Token::SheetRefQuoted(..)) => {
-                            let (_, slice2) = self.advance().unwrap();
+                            let (_, slice2, off2) = self.advance().unwrap();
                             let mut cell2 = if slice2.contains('!') {
-                                parse_sheet_cell_ref(slice2)?
+                                parse_sheet_cell_ref(slice2).map_err(|m| ParseError { offset: off2, message: m })?
                             } else {
-                                parse_cell_ref(slice2)?
+                                parse_cell_ref(slice2).map_err(|m| ParseError { offset: off2, message: m })?
                             };
                             if let Expr::CellRef { ref mut sheet, .. } = cell2 {
                                 if sheet.is_none() {
@@ -127,34 +157,33 @@ impl<'src> Parser<'src> {
                                 end: Box::new(cell2),
                             });
                         }
-                        _ => return Err("Expected cell reference after ':'".to_string()),
+                        _ => return Err(ParseError { offset: self.cur_offset(), message: "Expected cell reference after ':'".to_string() }),
                     }
                 }
                 Ok(cell)
             }
             Some(Token::CellRef(..)) => {
-                let (_, slice) = self.advance().unwrap();
-                let cell = parse_cell_ref(slice)?;
+                let (_, slice, off) = self.advance().unwrap();
+                let cell = parse_cell_ref(slice).map_err(|m| ParseError { offset: off, message: m })?;
 
-                // Check for range operator ':'
                 if self.peek() == Some(&Token::Colon) {
                     self.advance();
                     if let Some(Token::CellRef(..)) = self.peek() {
-                        let (_, slice2) = self.advance().unwrap();
-                        let cell2 = parse_cell_ref(slice2)?;
+                        let (_, slice2, off2) = self.advance().unwrap();
+                        let cell2 = parse_cell_ref(slice2).map_err(|m| ParseError { offset: off2, message: m })?;
                         return Ok(Expr::Range {
                             start: Box::new(cell),
                             end: Box::new(cell2),
                         });
                     } else {
-                        return Err("Expected cell reference after ':'".to_string());
+                        return Err(ParseError { offset: self.cur_offset(), message: "Expected cell reference after ':'".to_string() });
                     }
                 }
 
                 Ok(cell)
             }
             Some(Token::Ident(..)) => {
-                let (_, slice) = self.advance().unwrap();
+                let (_, slice, _) = self.advance().unwrap();
                 let slice = slice.to_string();
                 if self.peek() == Some(&Token::LParen) {
                     self.advance();
@@ -187,12 +216,12 @@ impl<'src> Parser<'src> {
                     expr: Box::new(expr),
                 })
             }
-            Some(t) => Err(format!("Unexpected token: {:?}", t)),
-            None => Err("Unexpected end of formula".to_string()),
+            Some(t) => Err(ParseError { offset: cur_off, message: format!("Unexpected token: {:?}", t) }),
+            None => Err(ParseError { offset: self.input_len, message: "Unexpected end of formula".to_string() }),
         }
     }
 
-    fn parse_arg_list(&mut self) -> Result<Vec<Expr>, String> {
+    fn parse_arg_list(&mut self) -> Result<Vec<Expr>, ParseError> {
         let mut args = Vec::new();
         if self.peek() == Some(&Token::RParen) {
             return Ok(args);

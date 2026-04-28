@@ -3,6 +3,7 @@ name = "xlcli-tui"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Terminal spreadsheet editor with vim bindings and full Excel compat"
 
 [[bin]]
 name = "xlcli"
@@ -15,7 +16,30 @@ xlcli-io = { workspace = true }
 ratatui = { workspace = true }
 crossterm = { workspace = true }
 clap = { workspace = true }
+clap_complete = "4"
 anyhow = { workspace = true }
 serde = { workspace = true }
 toml = "0.8"
 dirs = "6.0"
+
+[package.metadata.deb]
+name = "xlcli"
+maintainer = "Alvaro Gomero <alvarogomezruiz94@gmail.com>"
+copyright = "2026, Alvaro Gomero <alvarogomezruiz94@gmail.com>"
+license-file = ["../../LICENSE", "0"]
+extended-description = """\
+xlcli is a terminal-based spreadsheet editor written in Rust. \
+It supports vim-style navigation, full Excel formula evaluation, \
+conditional formatting, and round-trip xlsx/csv/ods file I/O."""
+section = "utils"
+priority = "optional"
+depends = "$auto"
+assets = [
+  ["../../target/release/xlcli", "usr/bin/", "755"],
+  ["../../assets/xlcli.desktop", "usr/share/applications/", "644"],
+  ["../../assets/xlcli.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+  ["../../assets/completions/xlcli.bash", "usr/share/bash-completion/completions/xlcli", "644"],
+  ["../../assets/completions/_xlcli", "usr/share/zsh/vendor-completions/", "644"],
+  ["../../assets/completions/xlcli.fish", "usr/share/fish/vendor_completions.d/", "644"],
+  ["../../README.md", "usr/share/doc/xlcli/README.md", "644"],
+]

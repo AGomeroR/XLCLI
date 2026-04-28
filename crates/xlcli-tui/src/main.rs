@@ -11,7 +11,8 @@ use std::io;
 use std::time::Duration;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Shell};
 use crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture,
     KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
@@ -34,10 +35,31 @@ use crate::config::Config;
 struct Cli {
     /// File to open (xlsx, csv, tsv, ods)
     file: Option<String>,
+
+    #[command(subcommand)]
+    cmd: Option<Cmd>,
+}
+
+#[derive(Subcommand)]
+enum Cmd {
+    /// Print shell completion script to stdout
+    #[command(hide = true)]
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    if let Some(Cmd::Completions { shell }) = cli.cmd {
+        let mut cmd = Cli::command();
+        let name = cmd.get_name().to_string();
+        generate(shell, &mut cmd, name, &mut io::stdout());
+        return Ok(());
+    }
 
     Config::ensure_default_exists();
     let config = Config::load();

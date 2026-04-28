@@ -9,6 +9,7 @@ pub struct Workbook {
     pub style_pool: StylePool,
     pub named_ranges: Vec<NamedRange>,
     pub file_path: Option<String>,
+    pub load_diagnostic: Option<String>,
 }
 
 impl Workbook {
@@ -19,6 +20,7 @@ impl Workbook {
             style_pool: StylePool::new(),
             named_ranges: Vec::new(),
             file_path: None,
+            load_diagnostic: None,
         };
         wb.sheets.push(Sheet::new("Sheet1"));
         wb

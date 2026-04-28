@@ -45,6 +45,13 @@ pub fn handle_event(app: &mut App, event: Event) {
         return;
     }
 
+    if app.cf_list.visible {
+        if let Event::Key(key) = event {
+            handle_cf_list_key(app, key);
+        }
+        return;
+    }
+
     match event {
         Event::Key(key) => match &app.mode {
             Mode::Normal => handle_normal(app, key),
@@ -228,17 +235,48 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_command(app: &mut App, key: KeyEvent) {
+    let cmd_matches = || -> Vec<&'static str> {
+        let q = app.command_buffer.to_lowercase();
+        let mut scored: Vec<(i32, &'static str)> = crate::render::COMMAND_LIST.iter()
+            .filter_map(|(c, _)| crate::render::fuzzy_score(&q, c).map(|s| (s, *c)))
+            .collect();
+        scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.len().cmp(&b.1.len())));
+        scored.into_iter().take(10).map(|(_, c)| c).collect()
+    };
     match key.code {
         KeyCode::Enter => {
             app.execute_command();
+            app.cmd_palette_selected = 0;
         }
         KeyCode::Esc => {
             app.command_buffer.clear();
+            app.cmd_palette_selected = 0;
             app.mode = Mode::Normal;
             app.visual_anchor = None;
         }
+        KeyCode::Tab => {
+            let m = cmd_matches();
+            if !m.is_empty() {
+                let pick = m[app.cmd_palette_selected.min(m.len() - 1)];
+                app.command_buffer = pick.to_string();
+                app.cmd_palette_selected = 0;
+            }
+        }
+        KeyCode::Down => {
+            let m = cmd_matches();
+            if !m.is_empty() {
+                app.cmd_palette_selected = (app.cmd_palette_selected + 1) % m.len();
+            }
+        }
+        KeyCode::Up => {
+            let m = cmd_matches();
+            if !m.is_empty() {
+                app.cmd_palette_selected = (app.cmd_palette_selected + m.len() - 1) % m.len();
+            }
+        }
         KeyCode::Backspace => {
             app.command_buffer.pop();
+            app.cmd_palette_selected = 0;
             if app.command_buffer.is_empty() {
                 app.mode = Mode::Normal;
                 app.visual_anchor = None;
@@ -246,6 +284,7 @@ fn handle_command(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Char(c) => {
             app.command_buffer.push(c);
+            app.cmd_palette_selected = 0;
         }
         _ => {}
     }
@@ -307,11 +346,40 @@ fn handle_insert(app: &mut App, key: KeyEvent) {
             app.enter_insert_clear();
         }
         KeyCode::Backspace => {
-            app.edit_buffer.pop();
+            if app.edit_cursor > 0 {
+                let mut idx = app.edit_cursor - 1;
+                while idx > 0 && !app.edit_buffer.is_char_boundary(idx) { idx -= 1; }
+                app.edit_buffer.remove(idx);
+                app.edit_cursor = idx;
+            }
             app.update_autocomplete();
         }
+        KeyCode::Delete => {
+            if app.edit_cursor < app.edit_buffer.len() {
+                app.edit_buffer.remove(app.edit_cursor);
+            }
+            app.update_autocomplete();
+        }
+        KeyCode::Left => {
+            if app.edit_cursor > 0 {
+                let mut idx = app.edit_cursor - 1;
+                while idx > 0 && !app.edit_buffer.is_char_boundary(idx) { idx -= 1; }
+                app.edit_cursor = idx;
+            }
+        }
+        KeyCode::Right => {
+            if app.edit_cursor < app.edit_buffer.len() {
+                let mut idx = app.edit_cursor + 1;
+                while idx < app.edit_buffer.len() && !app.edit_buffer.is_char_boundary(idx) { idx += 1; }
+                app.edit_cursor = idx;
+            }
+        }
+        KeyCode::Home => { app.edit_cursor = 0; }
+        KeyCode::End => { app.edit_cursor = app.edit_buffer.len(); }
         KeyCode::Char(c) => {
-            app.edit_buffer.push(c);
+            let pos = app.edit_cursor.min(app.edit_buffer.len());
+            app.edit_buffer.insert(pos, c);
+            app.edit_cursor = pos + c.len_utf8();
             app.update_autocomplete();
         }
         _ => {}
@@ -432,7 +500,9 @@ fn handle_mouse(app: &mut App, mouse: MouseEvent) {
                     } else {
                         CellAddr::new(viewing_sheet, data_row, data_col).display_name()
                     };
-                    app.edit_buffer.push_str(&cell_ref);
+                    let pos = app.edit_cursor.min(app.edit_buffer.len());
+                    app.edit_buffer.insert_str(pos, &cell_ref);
+                    app.edit_cursor = pos + cell_ref.len();
                     app.update_autocomplete();
                     return;
                 }
@@ -1069,6 +1139,7 @@ fn handle_cf_dialog(app: &mut App, key: KeyEvent) {
     let is_text_field = matches!(
         app.cf_dialog.focus,
         CfDialogFocus::Range | CfDialogFocus::Val1 | CfDialogFocus::Val2
+            | CfDialogFocus::BgHex | CfDialogFocus::FgHex
     );
     if app.cf_dialog.editing_text && is_text_field {
         match key.code {
@@ -1077,6 +1148,8 @@ fn handle_cf_dialog(app: &mut App, key: KeyEvent) {
                     CfDialogFocus::Range => &mut app.cf_dialog.range_text,
                     CfDialogFocus::Val1 => &mut app.cf_dialog.val1,
                     CfDialogFocus::Val2 => &mut app.cf_dialog.val2,
+                    CfDialogFocus::BgHex => &mut app.cf_dialog.bg_hex,
+                    CfDialogFocus::FgHex => &mut app.cf_dialog.fg_hex,
                     _ => unreachable!(),
                 };
                 buf.push(c);
@@ -1087,6 +1160,8 @@ fn handle_cf_dialog(app: &mut App, key: KeyEvent) {
                     CfDialogFocus::Range => &mut app.cf_dialog.range_text,
                     CfDialogFocus::Val1 => &mut app.cf_dialog.val1,
                     CfDialogFocus::Val2 => &mut app.cf_dialog.val2,
+                    CfDialogFocus::BgHex => &mut app.cf_dialog.bg_hex,
+                    CfDialogFocus::FgHex => &mut app.cf_dialog.fg_hex,
                     _ => unreachable!(),
                 };
                 buf.pop();
@@ -1112,6 +1187,17 @@ fn handle_cf_dialog(app: &mut App, key: KeyEvent) {
 
     match key.code {
         KeyCode::Esc => { app.cf_dialog.visible = false; }
+        KeyCode::Char('G') => {
+            app.cf_dialog.focus = CfDialogFocus::BtnClose;
+        }
+        KeyCode::Char('g') => {
+            if app.pending_key == Some('g') {
+                app.cf_dialog.focus = CfDialogFocus::Range;
+                app.pending_key = None;
+            } else {
+                app.pending_key = Some('g');
+            }
+        }
         KeyCode::Tab | KeyCode::Down | KeyCode::Char('j') => {
             if app.cf_dialog.focus == CfDialogFocus::RulesList {
                 let n = app.workbook.active_sheet().cond_rules.len();
@@ -1143,18 +1229,12 @@ fn handle_cf_dialog(app: &mut App, key: KeyEvent) {
                     app.cf_dialog.cond = all[(idx + all.len() - 1) % all.len()];
                 }
                 CfDialogFocus::Bg => {
-                    if app.cf_dialog.bg_idx == 0 {
-                        app.cf_dialog.bg_idx = CF_COLORS.len() - 1;
-                    } else {
-                        app.cf_dialog.bg_idx -= 1;
-                    }
+                    app.cf_dialog.bg_idx = if app.cf_dialog.bg_idx == 0 { CF_COLORS.len() - 1 } else { app.cf_dialog.bg_idx - 1 };
+                    app.cf_dialog.bg_hex = preset_hex_for(app.cf_dialog.bg_idx);
                 }
                 CfDialogFocus::Fg => {
-                    if app.cf_dialog.fg_idx == 0 {
-                        app.cf_dialog.fg_idx = CF_COLORS.len() - 1;
-                    } else {
-                        app.cf_dialog.fg_idx -= 1;
-                    }
+                    app.cf_dialog.fg_idx = if app.cf_dialog.fg_idx == 0 { CF_COLORS.len() - 1 } else { app.cf_dialog.fg_idx - 1 };
+                    app.cf_dialog.fg_hex = preset_hex_for(app.cf_dialog.fg_idx);
                 }
                 _ => {}
             }
@@ -1168,16 +1248,19 @@ fn handle_cf_dialog(app: &mut App, key: KeyEvent) {
                 }
                 CfDialogFocus::Bg => {
                     app.cf_dialog.bg_idx = (app.cf_dialog.bg_idx + 1) % CF_COLORS.len();
+                    app.cf_dialog.bg_hex = preset_hex_for(app.cf_dialog.bg_idx);
                 }
                 CfDialogFocus::Fg => {
                     app.cf_dialog.fg_idx = (app.cf_dialog.fg_idx + 1) % CF_COLORS.len();
+                    app.cf_dialog.fg_hex = preset_hex_for(app.cf_dialog.fg_idx);
                 }
                 _ => {}
             }
         }
         KeyCode::Enter | KeyCode::Char(' ') => {
             match app.cf_dialog.focus {
-                CfDialogFocus::Range | CfDialogFocus::Val1 | CfDialogFocus::Val2 => {
+                CfDialogFocus::Range | CfDialogFocus::Val1 | CfDialogFocus::Val2
+                | CfDialogFocus::BgHex | CfDialogFocus::FgHex => {
                     app.cf_dialog.editing_text = true;
                 }
                 CfDialogFocus::Conditional => {
@@ -1188,7 +1271,6 @@ fn handle_cf_dialog(app: &mut App, key: KeyEvent) {
                 CfDialogFocus::Under => app.cf_dialog.under = !app.cf_dialog.under,
                 CfDialogFocus::DUnder => app.cf_dialog.dunder = !app.cf_dialog.dunder,
                 CfDialogFocus::Strike => app.cf_dialog.strike = !app.cf_dialog.strike,
-                CfDialogFocus::Over => app.cf_dialog.over = !app.cf_dialog.over,
                 CfDialogFocus::Cond => {
                     app.cf_dialog.open_dropdown = CfDropdown::Cond;
                     let idx = CfCond::all().iter().position(|t| *t == app.cf_dialog.cond).unwrap_or(0);
@@ -1204,9 +1286,10 @@ fn handle_cf_dialog(app: &mut App, key: KeyEvent) {
                 }
                 CfDialogFocus::BtnApply => app.cf_dialog_apply(),
                 CfDialogFocus::BtnBase => app.cf_dialog_set_base(),
+                CfDialogFocus::BtnDismiss => app.cf_dialog_dismiss(),
                 CfDialogFocus::BtnDelete => app.cf_dialog_delete_selected(),
                 CfDialogFocus::BtnCleanAll => app.cf_dialog_clean_all(),
-                CfDialogFocus::BtnClose => app.cf_dialog.visible = false,
+                CfDialogFocus::BtnClose => { app.cf_dialog_apply(); app.cf_dialog.visible = false; }
                 _ => {}
             }
         }
@@ -1246,6 +1329,16 @@ fn cf_dropdown_item_count(app: &App) -> usize {
     }
 }
 
+fn preset_hex_for(idx: usize) -> String {
+    if idx == 0 { return String::new(); }
+    if let Some(name) = CF_COLORS.get(idx) {
+        if let Ok(Some(c)) = crate::app::color_by_name_pub(name) {
+            return format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b);
+        }
+    }
+    String::new()
+}
+
 fn select_cf_dropdown_item(app: &mut App, idx: usize) {
     match app.cf_dialog.open_dropdown {
         CfDropdown::Cond => {
@@ -1254,10 +1347,16 @@ fn select_cf_dropdown_item(app: &mut App, idx: usize) {
             }
         }
         CfDropdown::Bg => {
-            if idx < CF_COLORS.len() { app.cf_dialog.bg_idx = idx; }
+            if idx < CF_COLORS.len() {
+                app.cf_dialog.bg_idx = idx;
+                app.cf_dialog.bg_hex = preset_hex_for(idx);
+            }
         }
         CfDropdown::Fg => {
-            if idx < CF_COLORS.len() { app.cf_dialog.fg_idx = idx; }
+            if idx < CF_COLORS.len() {
+                app.cf_dialog.fg_idx = idx;
+                app.cf_dialog.fg_hex = preset_hex_for(idx);
+            }
         }
         CfDropdown::None => {}
     }
@@ -1305,7 +1404,6 @@ fn handle_cf_dialog_mouse(app: &mut App, x: u16, y: u16) {
     if hit(d.rect_under, x, y) { d.focus = CfDialogFocus::Under; d.under = !d.under; return; }
     if hit(d.rect_dunder, x, y) { d.focus = CfDialogFocus::DUnder; d.dunder = !d.dunder; return; }
     if hit(d.rect_strike, x, y) { d.focus = CfDialogFocus::Strike; d.strike = !d.strike; return; }
-    if hit(d.rect_over, x, y) { d.focus = CfDialogFocus::Over; d.over = !d.over; return; }
     if hit(d.rect_bg, x, y) {
         d.focus = CfDialogFocus::Bg;
         d.open_dropdown = CfDropdown::Bg;
@@ -1318,6 +1416,8 @@ fn handle_cf_dialog_mouse(app: &mut App, x: u16, y: u16) {
         d.dropdown_scroll = d.fg_idx;
         return;
     }
+    if hit(d.rect_bg_hex, x, y) { d.focus = CfDialogFocus::BgHex; d.editing_text = true; return; }
+    if hit(d.rect_fg_hex, x, y) { d.focus = CfDialogFocus::FgHex; d.editing_text = true; return; }
     let (rx, ry, rw, rh) = d.rect_rules;
     if x >= rx && x < rx + rw && y >= ry && y < ry + rh {
         d.focus = CfDialogFocus::RulesList;
@@ -1328,9 +1428,60 @@ fn handle_cf_dialog_mouse(app: &mut App, x: u16, y: u16) {
         }
         return;
     }
-    if hit(d.rect_apply, x, y) { d.focus = CfDialogFocus::BtnApply; app.cf_dialog_apply(); return; }
     if hit(d.rect_base, x, y) { d.focus = CfDialogFocus::BtnBase; app.cf_dialog_set_base(); return; }
+    if hit(d.rect_dismiss, x, y) { d.focus = CfDialogFocus::BtnDismiss; app.cf_dialog_dismiss(); return; }
+    if hit(d.rect_apply, x, y) { d.focus = CfDialogFocus::BtnApply; app.cf_dialog_apply(); return; }
+    if hit(d.rect_close, x, y) { app.cf_dialog_apply(); app.cf_dialog.visible = false; return; }
     if hit(d.rect_delete, x, y) { d.focus = CfDialogFocus::BtnDelete; app.cf_dialog_delete_selected(); return; }
     if hit(d.rect_cleanall, x, y) { d.focus = CfDialogFocus::BtnCleanAll; app.cf_dialog_clean_all(); return; }
-    if hit(d.rect_close, x, y) { app.cf_dialog.visible = false; return; }
+}
+
+fn handle_cf_list_key(app: &mut App, key: KeyEvent) {
+    let n = app.workbook.active_sheet().cond_rules.len();
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => {
+            app.cf_list.visible = false;
+            app.cf_list.pending_d = false;
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if n > 0 && app.cf_list.selected + 1 < n {
+                app.cf_list.selected += 1;
+            }
+            app.cf_list.pending_d = false;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.cf_list.selected > 0 { app.cf_list.selected -= 1; }
+            app.cf_list.pending_d = false;
+        }
+        KeyCode::Char('d') => {
+            if app.cf_list.pending_d {
+                app.cf_list_delete();
+                app.cf_list.pending_d = false;
+            } else {
+                app.cf_list.pending_d = true;
+            }
+        }
+        KeyCode::Char('a') => {
+            app.cf_list.pending_d = false;
+            app.cf_list_new();
+        }
+        KeyCode::Enter => {
+            app.cf_list.pending_d = false;
+            if n > 0 { app.cf_list_edit(); }
+        }
+        KeyCode::Char('g') => {
+            if app.pending_key == Some('g') {
+                app.cf_list.selected = 0;
+                app.pending_key = None;
+            } else {
+                app.pending_key = Some('g');
+            }
+            app.cf_list.pending_d = false;
+        }
+        KeyCode::Char('G') => {
+            if n > 0 { app.cf_list.selected = n - 1; }
+            app.cf_list.pending_d = false;
+        }
+        _ => { app.cf_list.pending_d = false; }
+    }
 }

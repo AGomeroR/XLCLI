@@ -242,13 +242,32 @@ Rules match a **condition** against cell value, then apply a **style overlay**.
 | `:cf clean` (visual)                         | Remove rules overlapping selection          |
 | `:cf clean A1:B5`                            | Remove rules overlapping range              |
 | `:cf clean all`                              | Remove all rules + base                     |
-| `:cf list`                                   | List rules                                  |
+| `:cf list`                                   | Open rules editor popup                     |
 
 **Conditions**: `gt N`, `lt N`, `gte N`, `lte N`, `eq N`, `neq N`, `between A B`, `contains TEXT`, `blanks`, `nonblanks`.
 
 **Style tokens**: `bold`, `italic`, `under`, `dunder`, `strike`, `over`, `bg=<color>`, `fg=<color>`. Negate with `!` (e.g., `!bold`).
 
-**Colors**: `red green blue yellow cyan magenta orange white black gray none`.
+**Colors**: `red green blue yellow cyan magenta orange white black gray none`, or hex `#RRGGBB` (in `:cf` dialog hex field).
+
+**Cond-format is round-tripped to xlsx** — rules saved as native `<conditionalFormatting>` + dxf entries. Excel/LibreOffice see same formatting.
+
+#### Rules editor popup (`:cf list`)
+
+| Key        | Action                                 |
+|------------|----------------------------------------|
+| `j` / `k`  | Next / prev rule                        |
+| `gg` / `G` | First / last rule                       |
+| `Enter`    | Edit selected rule (opens `:cf` dialog) |
+| `dd`       | Delete selected rule                    |
+| `a`        | New rule (opens `:cf` dialog)           |
+| `Esc`/`q`  | Close                                   |
+
+#### Format dialog hex color
+
+In the `:cf` popup, each of BG / FG has an optional `[#RRGGBB]` text field next to the preset picker. Non-empty valid hex overrides the preset. Empty → preset is used.
+
+The dialog also shows a live **Preview: ● Sample** row that reflects current BG/FG + bold/italic/underline/strikethrough choices.
 
 ### Text Case
 
@@ -501,6 +520,13 @@ xlcli file.xlsx           # Open xlsx file
 xlcli data.csv            # Open CSV file
 xlcli sheet.tsv           # Open TSV file
 xlcli book.ods            # Open ODS file
+xlcli completions <shell> # Print shell completion script (bash|zsh|fish|powershell|elvish)
 ```
 
 Supported formats: `.xlsx`, `.xls`, `.csv`, `.tsv`, `.ods`
+
+## Install
+
+- **Arch:** `cd packaging/arch && makepkg -si`
+- **Ubuntu/Debian:** `bash packaging/build-deb.sh && sudo apt install ./target/debian/xlcli_*.deb`
+- **From source:** `make build && sudo make install` (uninstall: `sudo make uninstall`)
