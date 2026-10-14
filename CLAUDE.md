@@ -100,6 +100,7 @@ Status: [x]=done [ ]=pending [~]=in progress
 - [x] Pushed to GitHub (`git@github.com:AGomeroR/XLCLI.git`)
 - [x] Un-gitignore `Cargo.lock` (committed for reproducible package builds)
 - [x] Bump workspace version to 1.0.0 (first functional release)
+- [x] Bump to 1.2.0 (Excel-style Tab chain + Shift+Enter clear-edit). Note: 1.1.0 search commit never bumped files; Cargo.toml + PKGBUILD now in sync
 - [x] `xlcli completions <shell>` subcommand via `clap_complete::generate` (Bash/Zsh/Fish/PowerShell/Elvish); hidden from `--help`
 - [x] `assets/xlcli.desktop` — Type=Application, Terminal=true, MimeType for xlsx/xls/ods/csv/tsv
 - [x] `assets/xlcli.svg` — placeholder grid+caret icon (Catppuccin palette; user can replace)

@@ -1,6 +1,6 @@
 # Maintainer: Alvaro Gomero <alvarogomezruiz94@gmail.com>
 pkgname=xlcli
-pkgver=1.0.0
+pkgver=1.2.0
 pkgrel=1
 pkgdesc="Terminal spreadsheet editor with vim bindings and full Excel compat"
 arch=('x86_64')
