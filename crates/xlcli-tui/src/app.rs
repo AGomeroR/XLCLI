@@ -444,6 +444,8 @@ pub struct App {
     pub dep_graph: DepGraph,
     pub sheet_states: HashMap<usize, SheetState>,
     pub formula_origin_sheet: Option<u16>,
+    /// Column where an insert-mode Tab chain started; Enter returns here on next row.
+    pub tab_anchor_col: Option<u16>,
     pub sort_dialog: SortDialog,
     pub filter_dialog: FilterDialog,
     pub cf_dialog: CfDialog,
@@ -505,6 +507,7 @@ impl App {
             dep_graph: DepGraph::new(),
             sheet_states: HashMap::new(),
             formula_origin_sheet: None,
+            tab_anchor_col: None,
             sort_dialog: SortDialog {
                 visible: false,
                 focus: SortDialogFocus::SortByCol,

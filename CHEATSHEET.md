@@ -35,7 +35,7 @@ Match is case-insensitive substring against rendered cell value, active sheet on
 | `j` / `Down` | Move down one cell         |
 | `k` / `Up`   | Move up one cell           |
 | `l` / `Right`| Move right one cell        |
-| `Tab`        | Move right one cell         |
+| `Tab`        | Move right one cell (starts Tab chain: next edit `Enter` returns to start column) |
 | `Shift+Tab`  | Move left one cell          |
 | `gg`         | Jump to first cell (A1)     |
 | `G`          | Jump to last row            |
@@ -52,6 +52,7 @@ Match is case-insensitive substring against rendered cell value, active sheet on
 | `i`     | Insert — clears cell, start typing fresh        |
 | `a`     | Append — keeps current value in buffer          |
 | `s`     | Substitute — clears cell, start typing fresh    |
+| `Shift+Enter` | Clear cell, start typing fresh (non-header rows) |
 | `=`     | Formula — clears cell, pre-fills `=` in buffer  |
 
 ### Clipboard
@@ -95,7 +96,7 @@ On confirm/cancel, returns to the formula's origin sheet.
 |-----|--------------------------------------|
 | `v` | Enter Visual selection mode          |
 | `:` | Enter Command mode                   |
-| `Shift+Enter` | Open filter dialog (on header row) |
+| `Shift+Enter` | Header row: open filter dialog. Else: clear cell + insert |
 | `q` | Quit (if no unsaved changes)         |
 
 ---
@@ -107,7 +108,7 @@ On confirm/cancel, returns to the formula's origin sheet.
 | Any char    | Type into cell                            |
 | `Backspace` | Delete last character                     |
 | `Esc`       | Confirm edit, return to Normal            |
-| `Enter`     | Confirm edit, move down one row           |
+| `Enter`     | Confirm edit, move down one row (back to Tab-chain start column if Tab used) |
 | `Tab`       | Confirm edit, move right, start new insert|
 
 ### Formula Entry

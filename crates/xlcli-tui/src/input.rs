@@ -66,6 +66,19 @@ pub fn handle_event(app: &mut App, event: Event) {
 }
 
 fn handle_normal(app: &mut App, key: KeyEvent) {
+    // Excel-style Tab chain: Tab/Shift+Tab and keys that start an edit keep the
+    // anchor column; any other Normal-mode key breaks the chain.
+    let keeps_anchor = matches!(
+        (key.modifiers, key.code),
+        (KeyModifiers::NONE, KeyCode::Tab)
+            | (KeyModifiers::SHIFT, KeyCode::BackTab)
+            | (KeyModifiers::NONE, KeyCode::Enter)
+            | (KeyModifiers::SHIFT, KeyCode::Enter)
+            | (KeyModifiers::NONE, KeyCode::Char('i' | 'a' | 's' | '='))
+    );
+    if !keeps_anchor {
+        app.tab_anchor_col = None;
+    }
     match (key.modifiers, key.code) {
         // Navigation
         (KeyModifiers::NONE, KeyCode::Char('h')) | (KeyModifiers::NONE, KeyCode::Left) => {
@@ -197,6 +210,9 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
 
         // Tab to move right, Shift+Tab to move left
         (KeyModifiers::NONE, KeyCode::Tab) => {
+            if app.tab_anchor_col.is_none() {
+                app.tab_anchor_col = Some(app.cursor.col);
+            }
             app.move_cursor(0, 1);
         }
         (KeyModifiers::SHIFT, KeyCode::BackTab) => {
@@ -230,10 +246,12 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
             app.command_buffer = "sheet add ".to_string();
         }
 
-        // Shift+Enter on header row — open filter dialog for cursor column
+        // Shift+Enter: header row → filter dialog; else clear cell and insert
         (KeyModifiers::SHIFT, KeyCode::Enter) => {
             if app.is_header_row(app.cursor.row) {
                 app.open_filter_dialog(Some(app.cursor.col));
+            } else {
+                app.enter_insert_clear();
             }
         }
 
@@ -371,13 +389,20 @@ fn handle_insert(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Esc => {
             app.autocomplete.visible = false;
+            app.tab_anchor_col = None;
             app.cancel_edit();
         }
         KeyCode::Enter => {
             app.confirm_edit();
+            if let Some(col) = app.tab_anchor_col.take() {
+                app.cursor.col = col;
+            }
             app.move_cursor(1, 0);
         }
         KeyCode::Tab => {
+            if app.tab_anchor_col.is_none() {
+                app.tab_anchor_col = Some(app.cursor.col);
+            }
             app.confirm_edit();
             app.move_cursor(0, 1);
             app.enter_insert_clear();

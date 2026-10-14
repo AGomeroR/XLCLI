@@ -86,6 +86,8 @@ Status: [x]=done [ ]=pending [~]=in progress
 - [x] Arrow keys move text cursor inside `edit_buffer` (Left/Right/Home/End/Delete + insertion at cursor)
 - [x] Cursor rendered as inverted block at insertion point (was always at end)
 - [x] Formula error popup: `ParseError { offset, message }` in `xlcli-formulas::parser`; parser tracks token byte spans. Live recompute in `App::recompute_formula_error()` called per render frame while in Insert mode w/ `=`-prefixed buffer. `render_formula_error` draws 2-row overlay below formula bar: red `^` caret at formula-relative column + red error message on next row. Offsets clamp to body length for EOF errors.
+- [x] Tab-chain return (Excel-style): `App.tab_anchor_col` set on first `Tab` (Normal or Insert); insert `Enter` confirms then jumps to anchor col on next row. Normal keys Tab/Shift+Tab/Enter/Shift+Enter/i/a/s/= keep anchor; any other Normal key or insert `Esc` clears it.
+- [x] `Shift+Enter` in Normal on non-header row → `enter_insert_clear()` (clear + type). Header rows still open filter dialog.
 
 ### Command palette (`:`)
 - [x] Live suggestions box appears on first character
